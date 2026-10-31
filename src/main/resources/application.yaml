@@ -2,7 +2,7 @@ spring:
   application:
     name: commute-study-api
   config:
-    import: optional:application-local.yaml
+    import: optional:file:.env[.properties]
   jpa:
     hibernate:
       ddl-auto: update
