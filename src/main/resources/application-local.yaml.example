@@ -1,0 +1,14 @@
+# 로컬 개발용 DB 접속 정보 템플릿
+#
+# 사용법:
+#   1. 이 파일을 복사해서 같은 폴더에 application-local.yaml 로 저장한다. (application-local.yaml 은 .gitignore 처리되어 있음)
+#   2. Supabase 프로젝트 > Project Settings > Database > Connection string 에서 정보를 확인한다.
+#      - "Connection pooling" (Transaction mode, port 6543) 주소를 쓰는 것을 권장한다.
+#   3. 아래 값을 실제 값으로 채운다. (비밀번호는 깃에 올리지 말고 팀원과는 별도 채널로 공유)
+#
+spring:
+  datasource:
+    url: jdbc:postgresql://aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres?sslmode=require
+    username: postgres.<project-ref>
+    password: <db-password>
+    driver-class-name: org.postgresql.Driver
