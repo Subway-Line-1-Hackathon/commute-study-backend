@@ -37,6 +37,6 @@ out/
 .vscode/
 
 ### Local secrets ###
+.env
 application-local.yaml
 application-local.yml
-.env
