@@ -14,6 +14,7 @@ Spring Boot 4.1.2 + PostgreSQL(Supabase) 기반 API 서버. Railway 로 배포�
 2. Supabase 대시보드 > **Project Settings > Database > Connection string** 에서 값을 확인해 `.env` 에 채운다.
    - 접속 주소는 **Connection pooling (Transaction mode, 6543 포트)** 사용을 권장한다. (서버리스/다중 인스턴스 환경에서 커넥션 수 제한 문제를 피할 수 있음)
    - DB 비밀번호는 깃/슬랙 등 공개 채널이 아닌 팀원과의 별도 채널(1:1 DM 등)로 공유한다.
+   - `.env`의 키는 **소문자 + 점 표기**(`spring.datasource.url` 등)로 적어야 한다. `.env`는 properties 파일로 읽히기 때문에, `SPRING_DATASOURCE_URL`처럼 대문자+언더스코어로 적으면 매핑이 안 된다. (아래 Railway 배포 섹션의 환경변수 표기와 다르니 주의)
 3. 실행
 
    ```bash
@@ -23,6 +24,8 @@ Spring Boot 4.1.2 + PostgreSQL(Supabase) 기반 API 서버. Railway 로 배포�
 ## 배포 (Railway)
 
 Railway 프로젝트의 **Variables** 탭에 아래 환경변수를 등록한다. (Supabase 접속 정보와 동일, URL에 `?sslmode=require` 포함)
+
+여기서는 실제 OS 환경변수로 주입되므로, 로컬 `.env`와 달리 **대문자 + 언더스코어 표기**를 그대로 쓴다.
 
 | 변수명 | 설명 |
 |---|---|
