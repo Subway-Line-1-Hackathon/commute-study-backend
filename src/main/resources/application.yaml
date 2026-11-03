@@ -5,11 +5,18 @@ spring:
     import: optional:file:.env[.properties]
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
         format_sql: true
+  flyway:
+    enabled: true
+    # Supabase의 6543(Transaction pooling)은 Flyway의 advisory lock(세션 단위)과
+    # 호환되지 않으므로, 마이그레이션은 5432(Session/Direct) 접속으로 분리한다.
+    url: ${spring.flyway.url}
+    user: ${spring.flyway.user}
+    password: ${spring.flyway.password}
 
 server:
   port: ${PORT:8080}
