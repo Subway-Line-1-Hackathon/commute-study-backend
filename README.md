@@ -61,3 +61,22 @@ java -jar build/libs/commute-study-api-0.0.1-SNAPSHOT.jar
 - 스키마를 바꿔야 하면 `src/main/resources/db/migration/` 에 `V{n}__설명.sql` 파일을 새로 추가한다 (예: `V2__add_push_subscription.sql`). **이미 머지된 `V{n}` 파일은 절대 수정하지 않는다** — 체크섬이 달라지면 Flyway가 기동을 거부한다.
 - 변경은 PR로 리뷰 후 `develop` 에 머지한다. 이후 누구든 먼저 로컬에서 앱을 기동하거나 Railway가 재배포되는 순간 자동으로 Supabase에 적용된다 (Flyway가 `flyway_schema_history` 테이블로 적용 여부를 추적하므로 중복 적용되지 않는다).
 - 초기 스키마는 `V1__init_schema.sql` (이슈 #3, 백엔드 개발 명세서 6장 기준)이다.
+
+## 개발용 시드 데이터
+
+자료 업로드·단원화 기능이 끝나기 전에 단원·문제 API를 개발할 수 있도록 `scripts/dev_seed.sql`을 제공한다 (이슈 #4).
+
+- **Flyway 마이그레이션 대상이 아니다.** `src/main/resources/db/migration/`에 두지 않고 `scripts/`에 따로 둔다. 운영 데모 직전에는 `dev_seed_cleanup.sql`로 지운다.
+- `app_user`, `subject`, `category`, `question` 등이 모두 `user_id`로 소유권이 걸려 있어서, **각자 자기 Supabase Auth UUID로 각자 실행해야** 한다. 한 사람이 넣은 시드를 다른 사람이 그대로 조회할 수 없다.
+
+### 실행 방법
+
+1. 본인 구글 계정으로 한 번 로그인해서 `auth.users`에 UUID가 있는지 확인한다 (Supabase 대시보드 > Authentication > Users).
+2. `scripts/dev_seed.sql`을 열어 `v_user_id` 값을 본인 UUID로 바꾼다.
+3. Supabase 대시보드 > SQL Editor에 전체 내용을 붙여넣고 실행한다.
+4. 과목 1개(`컴퓨터 구조`), 단원 3개, 단원별 O/X·객관식·단답형 문제(해설·출처 쪽수 포함), 학습 세션 1건과 응답 3건이 생성된다.
+5. 다시 실행해도 안전하다 (이미 들어간 데이터는 건너뛴다).
+
+### 삭제 방법
+
+`scripts/dev_seed_cleanup.sql`을 열어 같은 `v_user_id` 값으로 바꾼 뒤 SQL Editor에서 실행한다. 시드로 넣은 `subject`와 그 하위 데이터(`material`, `category`, `question`, `session`, `session_question`, `attempt`)만 지우고, `app_user` 행(실제 로그인 계정)은 지우지 않는다.
