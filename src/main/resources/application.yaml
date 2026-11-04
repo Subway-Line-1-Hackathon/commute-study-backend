@@ -18,5 +18,13 @@ spring:
     user: ${spring.flyway.user}
     password: ${spring.flyway.password}
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SUPABASE_URL}/auth/v1
+          jwk-set-uri: ${SUPABASE_URL}/auth/v1/.well-known/jwks.json
+          jws-algorithms: ES256
+          audiences: authenticated
 server:
   port: ${PORT:8080}
