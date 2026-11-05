@@ -1,3 +1,4 @@
+
 package com.likelion.commute_study_api.config;
 
 import org.springframework.context.annotation.Bean;
@@ -5,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -17,12 +19,17 @@ public class SecurityConfig {
             throws Exception {
 
         http
-            .csrf(csrf -> csrf.disable())
+            // 브라우저의 CORS 요청 허용
+            .cors(Customizer.withDefaults())
+
+            .csrf(AbstractHttpConfigurer::disable)
+
             .sessionManagement(session ->
                 session.sessionCreationPolicy(
                     SessionCreationPolicy.STATELESS
                 )
             )
+
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/swagger-ui/**",
@@ -32,6 +39,8 @@ public class SecurityConfig {
                 ).permitAll()
                 .anyRequest().authenticated()
             )
+
+            // Supabase JWT 검증
             .oauth2ResourceServer(oauth2 ->
                 oauth2.jwt(Customizer.withDefaults())
             );
