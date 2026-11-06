@@ -37,6 +37,9 @@ spring:
 
 server:
   port: ${PORT:8080}
+  # Railway terminates TLS before forwarding HTTP to the app. Reconstruct the
+  # public scheme/host before Spring Security CORS and springdoc generate URLs.
+  forward-headers-strategy: framework
 
 # 아래는 백엔드 개발 명세서 5장 설정값. 숫자를 코드에 하드코딩하지 않고 여기서 읽는다.
 app:
