@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Commute Study API</title>
+  <link rel="stylesheet" href="./swagger-ui.css">
+  <style>
+    body { margin: 0; background: #fafafa; }
+    #google-auth { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+      padding: 16px 24px; font: 14px sans-serif; background: #fff; border-bottom: 1px solid #ddd; }
+    #google-auth button { padding: 9px 16px; cursor: pointer; }
+    #google-auth button:disabled { cursor: default; }
+    #auth-status { flex: 1; min-width: 220px; }
+  </style>
+</head>
+<body>
+  <section id="google-auth" aria-label="Google 로그인">
+    <strong>API 테스트 로그인</strong>
+    <span id="auth-status" role="status" aria-live="polite">인증 설정 확인 중…</span>
+    <button id="google-login" disabled>Google 로그인</button>
+    <button id="google-logout" hidden>로그아웃</button>
+  </section>
+  <div id="swagger-ui"></div>
+  <script src="./swagger-ui-bundle.js"></script>
+  <script src="./swagger-ui-standalone-preset.js"></script>
+  <script src="./supabase.js"></script>
+  <script src="./google-auth.js"></script>
+</body>
+</html>
