@@ -11,7 +11,8 @@ const validSession = (token = 'supabase-access') => ({
   expires_at: Math.floor(Date.now() / 1000) + 3600, user: { email: 'test@example.invalid' }
 });
 
-async function harness({ session = null, code = '', enabled = true, exchangeError = false, signOutError = false } = {}) {
+async function harness({ session = null, code = '', enabled = true, exchangeError = false, signOutError = false,
+  pageUrl = 'http://localhost:8080/swagger-ui/index.html' } = {}) {
   const elements = Object.fromEntries(['auth-status', 'google-login', 'google-logout'].map(id => [id, {}]));
   const calls = { authorizations: [], logouts: [], signIns: [], exchanges: [], removed: [] };
   let listener;
@@ -39,7 +40,7 @@ async function harness({ session = null, code = '', enabled = true, exchangeErro
   SwaggerUIBundle.presets = { apis: {} };
   const storage = { removeItem: key => calls.removed.push(key) };
   const window = {
-    location: { href: 'http://localhost:8080/swagger-ui/index.html' + code },
+    location: { href: pageUrl + code },
     sessionStorage: storage,
     supabase: { createClient: (url, key, options) => { calls.client = { url, key, options }; return { auth }; } }
   };
@@ -140,4 +141,18 @@ test('cancelled OAuth callback clears the URL and offers retry without displayin
   assert.doesNotMatch(h.elements['auth-status'].textContent, /private-provider-detail/);
   await h.elements['google-login'].onclick();
   assert.equal(h.calls.signIns.length, 1);
+});
+
+test('local HTTP and Railway HTTPS keep the callback and automatic Bearer header on the correct origin', async () => {
+  for (const origin of ['http://localhost:8080', 'https://commute-study-backend-production.up.railway.app']) {
+    const pageUrl = origin + '/swagger-ui/index.html';
+    const h = await harness({ pageUrl, session: validSession() });
+    const request = await h.uiOptions.requestInterceptor({ url: origin + '/api/auth/me', headers: {} });
+    assert.equal(request.url, origin + '/api/auth/me');
+    assert.equal(request.headers.Authorization, 'Bearer supabase-access');
+    await h.elements['google-logout'].onclick();
+    await h.elements['google-login'].onclick();
+    assert.equal(h.calls.signIns.at(-1).options.redirectTo, pageUrl);
+    assert.equal(h.uiOptions.configUrl, origin + '/v3/api-docs/swagger-config');
+  }
 });
