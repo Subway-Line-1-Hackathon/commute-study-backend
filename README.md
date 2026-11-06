@@ -145,6 +145,38 @@ JS 테스트는 가짜 SDK 세션으로 로그인 요청·PKCE 콜백·갱신·�
 공식 참고: [Supabase PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow),
 [Google 로그인](https://supabase.com/docs/guides/auth/social-login/auth-google).
 
+## Railway HTTPS 프록시와 Swagger Failed to fetch 진단
+
+Railway는 외부 HTTPS 연결을 종료한 뒤 앱 컨테이너에는 HTTP로 전달한다.
+`server.forward-headers-strategy: framework`로 Spring이 `X-Forwarded-Proto`,
+`X-Forwarded-Host`, `X-Forwarded-Port` 및 표준 `Forwarded` 헤더를 먼저 반영하도록 한다.
+이 설정은 springdoc의 `servers` URL과 Spring Security의 동일 출처 판단에 적용된다.
+운영 도메인을 OpenAPI에 하드코딩하지 않으며, forwarded 헤더 없는 로컬 HTTP도 유지한다.
+forwarded 헤더는 신뢰하는 프록시가 외부 입력을 정리해 전달하는 것을 전제로 한다.
+
+- 최신 코드 배포 시 별도 환경변수는 필수가 아니다. Railway Variables에 기존
+  `SERVER_FORWARD_HEADERS_STRATEGY`가 `none`/`native`로 있으면 제거하거나 `framework`로 변경한다.
+  코드 배포 전 설정으로 우선 적용하려면 `SERVER_FORWARD_HEADERS_STRATEGY=framework`를 추가하고 재배포한다.
+- `/v3/api-docs`의 `servers[0].url`이 `https://<실제 운영 호스트>`인지 확인한다.
+  Swagger의 Servers와 Execute 후 Request URL도 HTTPS여야 한다. 강력 새로고침 후 다시 확인한다.
+- HTTPS 문서에서 HTTP API 요청을 만들면 브라우저가 Mixed Content로 차단할 수 있다.
+  개발자 도구 Console/Network에서 실제 Request URL과 차단 사유를 확인한다.
+  이 경우 `Access-Control-Allow-Origin: *` 추가나 JWT 설정 변경으로 해결하지 않는다.
+- HTTP 응답 401은 Bearer 토큰 누락/만료/검증 문제다. 403 `Invalid CORS request`는
+  Origin 판정 문제다. 응답 없이 `Failed to fetch`가 발생하면 Mixed Content, TLS, 네트워크,
+  브라우저 CORS 차단을 실제 URL과 함께 구분한다.
+- 같은 HTTPS Swagger origin에서 `/api/`를 호출하는 데는 별도 Origin 허용을 추가할 필요가 없다.
+  별도 프론트 앱은 **실제 주소창의 origin**(프로토콜·호스트·포트)을 확인하고
+  `APP_CORS_ALLOWED_ORIGINS`에 필요한 정확한 주소만 쉼표로 설정한다. 경로나 끝 슬래시는 넣지 않는다.
+  이 값은 기존 기본 목록을 대체한다. 현재 팀 프론트의 실제 origin은 배포 담당자가 확인해야 한다.
+- 기존 CORS의 GET/POST/PUT/PATCH/DELETE/OPTIONS 및 Authorization/Content-Type 허용은 유지한다.
+  Google PKCE 로그인·세션 갱신·수동 Authorize 및 ES256 JWT 정책도 변경하지 않는다.
+
+프록시 회귀 테스트는 실제 임베디드 HTTP 서버에서 forwarded 헤더를 넣어 OpenAPI URL,
+동일 origin의 인증 요청, 허용/비허용 origin Preflight와 로컬 HTTP를 검증한다.
+배포 후에는 일반 브라우저에서 Google 로그인 → `GET /api/auth/me` Execute → 200을 최종 확인한다.
+인증 없이 HTTPS로 API를 열면 401이 정상이며, 테스트를 위해 Origin을 전부 허용하지 않는다.
+
 ## DB 스키마 운영
 
 공용 Supabase DB를 2명이 함께 쓰므로, 스키마 변경은 **Flyway 마이그레이션 파일로만** 한다.
