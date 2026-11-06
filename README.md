@@ -23,6 +23,8 @@ Spring Boot 4.1.2 + PostgreSQL(Supabase) 기반 API 서버. Railway 로 배포�
    - `spring.flyway.*` : **Session/Direct connection (5432 포트)** 를 사용한다. 6543 Transaction 모드는 Flyway가 거는 advisory lock(세션 단위)과 호환되지 않아 마이그레이션 접속을 분리했다.
    - DB 비밀번호는 깃/슬랙 등 공개 채널이 아닌 팀원과의 별도 채널(1:1 DM 등)로 공유한다.
    - `.env`의 키는 **소문자 + 점 표기**(`spring.datasource.url` 등)로 적어야 한다. `.env`는 properties 파일로 읽히기 때문에, `SPRING_DATASOURCE_URL`처럼 대문자+언더스코어로 적으면 매핑이 안 된다. (아래 Railway 배포 섹션의 환경변수 표기와 다르니 주의)
+   - `SUPABASE_URL`은 예외적으로 **대문자 그대로** 쓴다(`application.yaml`이 `${SUPABASE_URL}`로 직접 참조). Supabase 대시보드 > Project Settings > API > Project URL 값. 구글 로그인(JWT 검증)에 필수라, 빠지면 `PlaceholderResolutionException`으로 기동이 실패한다.
+   - `AI_SERVER_URL`, `AI_INTERNAL_KEY`도 대문자 그대로 쓴다. 둘 다 기본값(`http://localhost:8000`, 빈 값)이 있어 없어도 기동은 되지만, AI 서버를 실제로 호출하려면 채워야 한다. 로컬에서는 `commute-study-ai`를 `AI_MOCK=true`로 직접 띄워서 연결한다(`.env.example` 참고).
 3. 실행
 
    ```bash
@@ -49,6 +51,10 @@ Railway 프로젝트의 **Variables** 탭에 아래 환경변수를 등록한다
 | `SPRING_FLYWAY_URL` | Supabase JDBC URL (5432, Session/Direct) |
 | `SPRING_FLYWAY_USER` | Supabase DB 사용자명 (datasource와 동일) |
 | `SPRING_FLYWAY_PASSWORD` | Supabase DB 비밀번호 (datasource와 동일) |
+| `SUPABASE_URL` | 구글 로그인 JWT 검증용 Supabase Project URL. **빠지면 기동 자체가 실패한다** |
+| `AI_SERVER_URL` | AI 서버 주소 (같은 Railway 프로젝트 내부망, 포트 포함) |
+| `AI_INTERNAL_KEY` | AI 서버의 같은 이름 변수와 같은 값. 로그에 남기지 않는다 |
+| `SPRING_PROFILES_ACTIVE` | `prod` — 운영에서 `show-sql`을 끄는 프로파일(`application-prod.yaml`) 적용 |
 
 Railway는 자체적으로 `PORT` 환경변수를 주입하며, `application.yaml` 의 `server.port: ${PORT:8080}` 설정이 이를 자동으로 반영한다. 별도 설정 불필요.
 
