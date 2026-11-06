@@ -7,6 +7,7 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: true
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
@@ -14,6 +15,7 @@ spring:
     enabled: true
     # Supabase의 6543(Transaction pooling)은 Flyway의 advisory lock(세션 단위)과
     # 호환되지 않으므로, 마이그레이션은 5432(Session/Direct) 접속으로 분리한다.
+    url: ${spring.flyway.url}
     user: ${spring.flyway.user}
     password: ${spring.flyway.password}
 
@@ -25,9 +27,75 @@ spring:
           jwk-set-uri: ${SUPABASE_URL}/auth/v1/.well-known/jwks.json
           jws-algorithms: ES256
           audiences: authenticated
-app:
-  cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://127.0.0.1:5500,http://127.0.0.1:5501,http://localhost:5500,http://localhost:5501}
+
+  servlet:
+    multipart:
+      # 업로드 한도(30MB)보다 크게 잡아, 초과 거부는 프레임워크가 아니라
+      # 애플리케이션 코드가 FILE_TOO_LARGE로 먼저 하게 한다(명세서 10장).
+      max-file-size: 35MB
+      max-request-size: 35MB
 
 server:
   port: ${PORT:8080}
+
+# 아래는 백엔드 개발 명세서 5장 설정값. 숫자를 코드에 하드코딩하지 않고 여기서 읽는다.
+app:
+  timezone: Asia/Seoul
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://127.0.0.1:5500,http://127.0.0.1:5501,http://localhost:5500,http://localhost:5501}
+
+commute:
+  min-minutes: 10
+  max-minutes: 120
+
+user:
+  nickname-min: 2
+  nickname-max: 10
+
+study:
+  curriculum-min-minutes: 20
+  summary-minutes: 3
+  max-questions-per-session: 30
+  minutes-per-question:
+    ox: 0.5
+    mc: 1
+    short: 1.5
+
+question:
+  pregen-total: 40
+  max-per-category-difficulty: 60
+  pregen-ratio:
+    ox: 14
+    mc: 13
+    short: 13
+
+upload:
+  max-file-mb: 30
+  allowed-types: PDF,PPTX,PNG
+
+material:
+  retention-days: 7
+  max-per-user: 10
+  processing-timeout-minutes: 10
+
+report:
+  min-answers: 5
+
+wrongnote:
+  max-open: 100
+  max-resolved: 50
+
+ai:
+  server-url: ${AI_SERVER_URL:http://localhost:8000}
+  internal-key: ${AI_INTERNAL_KEY:}
+  max-concurrency: 3
+  signed-url-ttl-minutes: 10
+  question-daily-limit: 20
+  timeout:
+    health: 5
+    ai01: 300
+    ai02: 60
+    ai02-extra: 60
+    ai03: 5
+    ai05: 15
+    ai06: 15
