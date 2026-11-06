@@ -49,6 +49,13 @@ Railway 프로젝트의 **Variables** 탭에 아래 환경변수를 등록한다
 | `SPRING_FLYWAY_URL` | Supabase JDBC URL (5432, Session/Direct) |
 | `SPRING_FLYWAY_USER` | Supabase DB 사용자명 (datasource와 동일) |
 | `SPRING_FLYWAY_PASSWORD` | Supabase DB 비밀번호 (datasource와 동일) |
+| `APP_CORS_ALLOWED_ORIGINS` | 허용할 프론트 출처의 쉼표 목록 (예: `https://frontend.example.com,https://preview.example.com`) |
+
+CORS는 `/api/**`에 적용되며 GET, POST, PUT, PATCH, DELETE, OPTIONS를 허용한다.
+`app.cors.allowed-origins`의 기본값은 `http://127.0.0.1:5500`, `http://127.0.0.1:5501`,
+`http://localhost:5500`, `http://localhost:5501`이다. 운영에서는 프론트 담당과 확정한 출처를
+`APP_CORS_ALLOWED_ORIGINS`로 주입한다. 설정한 목록은 기본값을 대체하며, 출처는 경로나 끝 슬래시 없이 입력한다.
+로컬 `.env`에서는 `app.cors.allowed-origins`로 설정할 수 있다.
 
 Railway는 자체적으로 `PORT` 환경변수를 주입하며, `application.yaml` 의 `server.port: ${PORT:8080}` 설정이 이를 자동으로 반영한다. 별도 설정 불필요.
 
