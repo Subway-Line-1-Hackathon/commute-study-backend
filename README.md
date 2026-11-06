@@ -73,6 +73,78 @@ Railway가 자동 생성하는 Start Command는 멀티모듈 구조를 가정한
 java -jar build/libs/commute-study-api-0.0.1-SNAPSHOT.jar
 ```
 
+## Swagger UI에서 Google 로그인 (Issue #42)
+
+별도 HTML 파일이나 프론트 서버 없이 Spring Boot의 `/swagger-ui/index.html`에서
+Google 로그인, 로그인 상태 확인, 로그아웃, API Execute를 사용할 수 있다.
+기존 **Authorize** 버튼을 통한 Access Token 수동 입력도 유지된다.
+
+### 환경별 설정
+
+- `SUPABASE_URL`: 현재 JWT 검증에 사용하는 것과 **같은** Supabase 프로젝트 URL.
+- `SUPABASE_PUBLISHABLE_KEY`: Supabase 프로젝트의 **publishable 키** (`sb_publishable_...`).
+  구형 프로젝트는 이 항목 대신 `SUPABASE_ANON_KEY`에 legacy **anon 키**를 설정한다.
+  두 키가 모두 설정되면 `SUPABASE_PUBLISHABLE_KEY`가 우선한다.
+- 로컬에서는 루트 `.env`, Railway에서는 Variables에 설정하고 앱을 재시작한다.
+  `service_role`, `sb_secret_*`, Google Client Secret, JWT Secret은 이 공개 키 항목에 넣지 않는다.
+  잘못된 키나 누락된 키는 브라우저로 전달하지 않고 Google 로그인만 비활성화한다.
+- 키를 넣기 전에도 기존 수동 Authorize와 API 인증은 사용할 수 있다.
+
+### Supabase / Google 대시보드 설정
+
+1. Supabase **Authentication → Sign In / Providers → Google**에서 Google provider를 활성화한다.
+   Google OAuth Client ID/Secret은 Supabase 대시보드에만 저장한다.
+2. Google Cloud OAuth 클라이언트의 **Authorized redirect URIs**에는 Supabase가 표시하는
+   `https://<project-ref>.supabase.co/auth/v1/callback`을 등록한다. 앱 Swagger 주소와 다르다.
+3. Supabase **Authentication → URL Configuration → Redirect URLs**에는 아래 앱 주소를
+   정확히 등록한다. 코드 콜백은 별도 경로 없이 이 페이지에서 처리한다.
+
+   ```text
+   http://localhost:8080/swagger-ui/index.html
+   https://commute-study-backend-production.up.railway.app/swagger-ui/index.html
+   ```
+
+   `127.0.0.1`, 다른 포트, 별도 배포 도메인 또는 context path를 사용하면 그 주소도 별도로 등록한다.
+   운영에서는 정확한 HTTPS 주소를 사용한다. Site URL만 등록하는 것으로 Redirect URLs를 대신하지 않는다.
+   Google 앱이 Testing 상태라면 테스트할 Google 계정도 Google Cloud의 테스트 사용자에 등록한다.
+
+### 실제 로그인 확인
+
+1. 설정 후 앱을 실행하고 일반 브라우저의 **같은 탭**에서
+   `http://localhost:8080/swagger-ui/index.html`을 연다.
+2. **Google 로그인**을 눌러 계정을 선택한다. 콜백 후 상단에 이메일과 로그아웃 버튼이 표시된다.
+3. `GET /api/auth/me`의 **Try it out → Execute**를 누른다. 수동 토큰 입력 없이 200과 본인 UUID를 확인한다.
+4. `GET /api/users/me/nickname`도 확인한다. PUT은 실제 닉네임을 변경하므로 변경할 의사가 있는
+   테스트 계정에서만 `{"nickname":"동현"}`으로 실행한다.
+5. **로그아웃**을 누르고 API를 다시 호출하면 401이어야 한다. 이후 Authorize에 별도 Supabase
+   Access Token을 직접 넣으면 기존 방식으로 호출할 수 있다.
+
+### 처리 방식과 한계
+
+- SDK의 `signInWithOAuth(provider: google)`를 `flowType: pkce`로 사용하고, 콜백의 `code`를
+  `exchangeCodeForSession`으로 교환한다. Swagger 표준 OAuth2 provider 설정으로 대체하지 않는다.
+- API에는 **Supabase session.access_token**만 사용한다. Google `provider_token`을 사용하지 않는다.
+  기존 `bearerAuth` 스키마에 토큰을 적용하고 같은 origin의 `/api/` 요청에만 자동 전송한다.
+- Access/refresh token과 PKCE verifier는 SDK가 **sessionStorage(탭 범위)**로 관리한다.
+  자동 갱신된 토큰을 Swagger에도 반영한다. 갱신 실패·만료 시 API 실행을 중단하고 재로그인을 안내한다.
+  토큰은 로그/주소창에 기록하지 않고 콜백의 코드/오류 URL도 즉시 지운다.
+- 로그아웃은 이 탭에서 사용하는 Supabase 세션을 대상으로 하며 Google 계정 자체를 로그아웃하지 않는다.
+  원격 로그아웃 실패 시에도 이 탭의 저장 토큰·Swagger 인증을 해제한다.
+- 로그인 취소/콜백 오류 시 같은 탭에서 다시 시도한다. 탭을 바꾸거나 탭 저장소를 차단하면
+  PKCE verifier를 찾지 못할 수 있다. 공유 PC에서는 사용 후 로그아웃하고 탭을 닫는다.
+- 문서 자산과 공개 키 설정은 기존 `/swagger-ui/**` 공개 범위 안에서 제공한다.
+  Spring Security, ES256 검증, CORS, DB 마이그레이션 및 기존 API 로직은 변경하지 않는다.
+- Supabase SDK **2.119.0** UMD와 MIT 라이선스를 `src/main/resources/swagger-auth/`에 포함했다.
+  브라우저가 런타임에 CDN을 호출하지 않는다. 원본은
+  `https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js`이며 SHA-256은
+  `a867edbcfb029370aeec7223dd6180b560b621fbe3bc64c6584fb0369d1b7bce`다.
+
+자동 테스트는 `./gradlew test`와 `node --test scripts/swagger-auth.test.cjs`로 실행한다.
+JS 테스트는 가짜 SDK 세션으로 로그인 요청·PKCE 콜백·갱신·자동 헤더·로그아웃·수동 인증을 검증한다.
+실제 Google 계정 선택과 Supabase 대시보드 설정은 위 절차로 별도 확인해야 한다.
+공식 참고: [Supabase PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow),
+[Google 로그인](https://supabase.com/docs/guides/auth/social-login/auth-google).
+
 ## DB 스키마 운영
 
 공용 Supabase DB를 2명이 함께 쓰므로, 스키마 변경은 **Flyway 마이그레이션 파일로만** 한다.

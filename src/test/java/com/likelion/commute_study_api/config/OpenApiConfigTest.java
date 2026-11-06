@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "spring.config.import=",
         "SUPABASE_URL=https://auth.example.invalid",
+        "SUPABASE_PUBLISHABLE_KEY=sb_publishable_test",
         "spring.autoconfigure.exclude="
                 + "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
                 + "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,"
@@ -48,7 +49,30 @@ class OpenApiConfigTest {
     @Test
     void swaggerUiRemainsPublic() throws Exception {
         mvc.perform(get("/swagger-ui/index.html"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Google 로그인")));
+        mvc.perform(get("/swagger-ui/auth-config"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.publishableKey").value("sb_publishable_test"));
+        for (String asset : new String[] { "google-auth.js", "supabase.js",
+                "swagger-ui-bundle.js", "swagger-ui-standalone-preset.js", "swagger-ui.css" }) {
+            mvc.perform(get("/swagger-ui/" + asset)).andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void bearerHeaderStillAuthenticatesMeWithoutChangingApiContract() throws Exception {
+        var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("manual-test-token")
+                .header("alg", "ES256").subject("11111111-1111-1111-1111-111111111111")
+                .claim("email", "test@example.invalid").build();
+        org.mockito.Mockito.when(jwtDecoder.decode("manual-test-token")).thenReturn(jwt);
+        mvc.perform(get("/api/auth/me").header("Authorization", "Bearer manual-test-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(jwt.getSubject()))
+                .andExpect(jsonPath("$.email").value("test@example.invalid"));
     }
 
     @Test
