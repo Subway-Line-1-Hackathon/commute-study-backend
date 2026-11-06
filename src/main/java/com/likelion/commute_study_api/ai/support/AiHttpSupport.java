@@ -8,8 +8,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import com.likelion.commute_study_api.ai.AiCallException;
@@ -47,15 +47,28 @@ public class AiHttpSupport {
 		} catch (RestClientResponseException e) {
 			long elapsedMs = System.currentTimeMillis() - start;
 			throw translate(featureId, elapsedMs, e.getStatusCode(), e.getResponseBodyAs(AiErrorBody.class));
-		} catch (ResourceAccessException e) {
+		} catch (RestClientException e) {
+			// 응답(상태 코드)을 못 받은 경우. 연결 실패와 읽기 타임아웃이 둘 다 이 경로로 온다(RestClient 버전에 따라
+			// ResourceAccessException일 수도, 좀 더 일반적인 RestClientException일 수도 있어 원인 체인을 끝까지 본다).
 			long elapsedMs = System.currentTimeMillis() - start;
-			if (e.getCause() instanceof SocketTimeoutException) {
+			if (containsSocketTimeout(e)) {
 				log.error("[{}] AI 서버 응답 지연 elapsedMs={}", featureId, elapsedMs);
 				throw new ApiException(AiErrorCode.AI_TIMEOUT);
 			}
 			log.error("[{}] AI 서버 연결 실패 elapsedMs={} msg={}", featureId, elapsedMs, e.getMessage());
 			throw new ApiException(AiErrorCode.AI_UNAVAILABLE);
 		}
+	}
+
+	private boolean containsSocketTimeout(Throwable e) {
+		Throwable cur = e;
+		while (cur != null) {
+			if (cur instanceof SocketTimeoutException) {
+				return true;
+			}
+			cur = cur.getCause();
+		}
+		return false;
 	}
 
 	public boolean health() {
