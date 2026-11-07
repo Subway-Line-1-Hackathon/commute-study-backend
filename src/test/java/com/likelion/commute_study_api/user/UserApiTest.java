@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
@@ -60,6 +61,140 @@ class UserApiTest {
 
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.likelion.commute_study_api.subject.SubjectRepository subjectRepository;
+
+    @org.springframework.test.context.bean.override.convention.TestBean(name = "subjectClock", methodName = "fixedSubjectClock")
+    java.time.Clock subjectClock;
+
+    static java.time.Clock fixedSubjectClock() {
+        // UTC is still November 6, but KST is already November 7.
+        return java.time.Clock.fixed(Instant.parse("2026-11-06T15:30:00Z"), java.time.ZoneOffset.UTC);
+    }
+
+    @Test
+    void creationUsesAuthenticatedUuidAndAutomaticallyCreatesUser() throws Exception {
+        mvc.perform(post("/api/subjects").header("Authorization", token(USER, false))
+                        .contentType("application/json").content("{\"name\":\"선형대수\",\"examDate\":\"2026-12-15\",\"userId\":\"" + OTHER + "\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.subjectId").isNumber());
+        assertThat(jdbc.queryForObject("SELECT user_id FROM public.subject", UUID.class)).isEqualTo(USER);
+        assertThat(jdbc.queryForObject("SELECT nickname FROM public.app_user WHERE id = ?", String.class, USER)).isNull();
+        mvc.perform(get("/api/users/me").header("Authorization", token(USER, false)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.hasSubject").value(true))
+                .andExpect(jsonPath("$.status").value("AUTHENTICATED"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"가", "가나다라마바사아자차카타파하가나다라마바", "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"})
+    void validNameBoundariesAndDuplicateNamesAreAllowed(String name) throws Exception {
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/subjects").header("Authorization", token(USER, false))
+                            .contentType("application/json").content("{\"name\":\"" + name + "\"}"))
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.subjectId").isNumber());
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.subject WHERE user_id = ?", Integer.class, USER)).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"name\":null}", "{\"name\":\"\"}", "{\"name\":\"   \"}",
+            "{\"name\":\"123456789012345678901\"}", "{\"name\":123}",
+            "{\"name\":\"수학\",\"examDate\":\"2026-02-30\"}",
+            "{\"name\":\"수학\",\"examDate\":\"2026-02-29\"}",
+            "{\"name\":\"수학\",\"examDate\":\"2026-2-01\"}",
+            "{\"name\":\"수학\",\"examDate\":\"2026/12/15\"}",
+            "{\"name\":\"수학\",\"examDate\":\"2026-12-15T00:00:00Z\"}",
+            "{\"name\":\"수학\",\"examDate\":\"\"}",
+            "{\"name\":\"수학\",\"examDate\":20261215}", "[]", "null", "{"})
+    void invalidRequestsReturn400WithoutDatabaseWrites(String body) throws Exception {
+        mvc.perform(post("/api/subjects").header("Authorization", token(USER, false))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.subject", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.app_user", Integer.class)).isZero();
+    }
+
+    @Test
+    void listIsEmptyForNewUserAndExcludesForeignSubjects() throws Exception {
+        seed(OTHER, "다른사용자", true, true);
+        mvc.perform(get("/api/subjects").header("Authorization", token(USER, false)))
+                .andExpect(status().isOk()).andExpect(content().json("{\"subjects\":[]}"));
+    }
+
+    @Test
+    void listContainsAllOwnSubjectsInIdOrderWithKstDaysAndOptionalFields() throws Exception {
+        String bearer = token(USER, false);
+        for (String date : new String[] {"2026-11-07", "2026-11-08", "2026-11-17", "2026-11-06", null}) {
+            mvc.perform(post("/api/subjects").header("Authorization", bearer).contentType("application/json")
+                            .content("{\"name\":\"수학\",\"examDate\":" + (date == null ? "null" : "\"" + date + "\"") + "}"))
+                    .andExpect(status().isCreated());
+        }
+        seed(OTHER, "다른사용자", true, true);
+        var ids = jdbc.queryForList("SELECT id FROM public.subject WHERE user_id = ? ORDER BY id", Long.class, USER);
+        mvc.perform(get("/api/subjects").header("Authorization", bearer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.subjects.length()").value(5))
+                .andExpect(jsonPath("$.subjects[0].id").value(ids.getFirst()))
+                .andExpect(jsonPath("$.subjects[4].id").value(ids.getLast()))
+                .andExpect(jsonPath("$.subjects[0].dDay").value(0))
+                .andExpect(jsonPath("$.subjects[1].dDay").value(1))
+                .andExpect(jsonPath("$.subjects[2].dDay").value(10))
+                .andExpect(jsonPath("$.subjects[3].examDate").value("2026-11-06"))
+                .andExpect(jsonPath("$.subjects[3].dDay").doesNotExist())
+                .andExpect(jsonPath("$.subjects[4].examDate").doesNotExist())
+                .andExpect(jsonPath("$.subjects[4].dDay").doesNotExist());
+    }
+
+    @Test
+    void ownershipDoesNotRevealForeignOrMissingSubjects() {
+        seed(USER, null, false, false);
+        seed(OTHER, null, false, false);
+        long id = subjectRepository.create(USER, "수학", null);
+        subjectRepository.requireOwned(id, USER);
+        assertThat(subjectRepository.isOwnedBy(id, USER)).isTrue();
+        for (long target : new long[] {id, Long.MAX_VALUE}) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> subjectRepository.requireOwned(target, OTHER))
+                    .isInstanceOfSatisfying(com.likelion.commute_study_api.common.exception.ApiException.class,
+                            error -> assertThat(error.getErrorCode()).isEqualTo(
+                                    com.likelion.commute_study_api.common.exception.CommonErrorCode.NOT_FOUND));
+        }
+    }
+
+    @Test
+    void subjectCreationCompletesSetupAndActivatesUser() throws Exception {
+        String bearer = token(USER, false);
+        mvc.perform(put(SETTINGS).header("Authorization", bearer).contentType("application/json")
+                        .content("{\"nickname\":\"동현\",\"oneWayMin\":50}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/users/me").header("Authorization", bearer))
+                .andExpect(jsonPath("$.status").value("AUTHENTICATED"))
+                .andExpect(jsonPath("$.hasSubject").value(false));
+        mvc.perform(post("/api/subjects").header("Authorization", bearer).contentType("application/json")
+                        .content("{\"name\":\"프로그래밍\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/api/users/me").header("Authorization", bearer))
+                .andExpect(jsonPath("$.status").value("ACTIVE")).andExpect(jsonPath("$.hasSubject").value(true));
+    }
+
+    @Test
+    void failedSubjectInsertRollsBackAutomaticUserCreation() throws Exception {
+        jdbc.execute("ALTER TABLE public.subject ADD CONSTRAINT subject_test_failure CHECK (name <> '실패')");
+        try {
+            mvc.perform(post("/api/subjects").header("Authorization", token(USER, false)).contentType("application/json")
+                            .content("{\"name\":\"실패\"}"))
+                    .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM public.app_user", Integer.class)).isZero();
+        } finally {
+            jdbc.execute("ALTER TABLE public.subject DROP CONSTRAINT subject_test_failure");
+        }
+    }
+
+    @Test
+    void subjectApisRejectMissingOrExpiredJwt() throws Exception {
+        for (String bearer : new String[] {"", token(USER, true)}) {
+            mvc.perform(get("/api/subjects").header("Authorization", bearer)).andExpect(status().isUnauthorized());
+            mvc.perform(post("/api/subjects").header("Authorization", bearer).contentType("application/json")
+                            .content("{\"name\":\"수학\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
     @Autowired com.likelion.commute_study_api.common.config.StudyProperties studyProperties;
 
     private static final String SETTINGS = "/api/users/me/settings";
