@@ -110,6 +110,8 @@ ai:
   max-concurrency: 3
   signed-url-ttl-minutes: ${AI_SIGNED_URL_TTL_MINUTES:10}
   question-daily-limit: 20
+  # 개발·데모용: 요청의 X-Mock-Error 헤더를 AI 서버(mock)로 넘긴다. 운영에서는 false
+  mock-error-passthrough: ${AI_MOCK_ERROR_PASSTHROUGH:false}
   timeout:
     health: 5
     ai01: 300
