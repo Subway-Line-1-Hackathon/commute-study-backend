@@ -41,6 +41,11 @@ public class GlobalExceptionHandler {
 				.body(ErrorResponse.of(CommonErrorCode.VALIDATION_ERROR, "파일 용량이 한도를 초과했습니다.", null));
 	}
 
+	@ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+	public ResponseEntity<ErrorResponse> handleUnreadable(org.springframework.http.converter.HttpMessageNotReadableException e) {
+		return ResponseEntity.badRequest().body(ErrorResponse.of(CommonErrorCode.VALIDATION_ERROR));
+	}
+
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
 		log.error("Unhandled exception", e);

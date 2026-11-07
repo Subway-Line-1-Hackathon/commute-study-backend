@@ -43,6 +43,11 @@ class OpenApiConfigTest {
                 .andExpect(jsonPath("$.paths['/api/auth/me'].get.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/auth/me'].get.deprecated").value(true))
                 .andExpect(jsonPath("$.paths['/api/users/me'].get.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/users/me/nickname'].get.deprecated").value(true))
+                .andExpect(jsonPath("$.paths['/api/users/me/nickname'].put.deprecated").value(true))
+                .andExpect(jsonPath("$.paths['/api/users/me/settings'].get.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/users/me/settings'].put.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/users/me/settings'].put.requestBody.content['application/json'].example.oneWayMin").value(50))
                 .andExpect(jsonPath("$.paths['/api/users/me/nickname'].get.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/users/me/nickname'].put.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/users/me/nickname'].put.requestBody.content['application/json'].example.nickname").value("동현"));

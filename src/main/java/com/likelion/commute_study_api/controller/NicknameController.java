@@ -40,6 +40,7 @@ public class NicknameController {
                     )
             )
     )
+    @io.swagger.v3.oas.annotations.Operation(deprecated = true, description = "PUT /api/users/me/settings로 전환해주세요.")
     @PutMapping("/nickname")
     public ResponseEntity<?> updateNickname(
             @AuthenticationPrincipal Jwt jwt,
@@ -80,6 +81,7 @@ public class NicknameController {
     }
 
     // 현재 로그인한 사용자의 닉네임 조회
+    @io.swagger.v3.oas.annotations.Operation(deprecated = true, description = "GET /api/users/me/settings로 전환해주세요.")
     @GetMapping("/nickname")
     public ResponseEntity<?> getNickname(
             @AuthenticationPrincipal Jwt jwt) {
