@@ -1,0 +1,102 @@
+package com.likelion.commute_study_api.material;
+
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.UUID;
+import com.likelion.commute_study_api.ai.material.MaterialProcessResponse;
+import com.likelion.commute_study_api.common.exception.ApiException;
+import com.likelion.commute_study_api.common.exception.CommonErrorCode;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class MaterialRepository {
+    private final JdbcTemplate jdbc;
+    public MaterialRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+
+    public long insert(long subjectId, String reference, String name, String type, String kind, long size, Instant expires) {
+        var key = new GeneratedKeyHolder();
+        jdbc.update(connection -> {
+            var ps = connection.prepareStatement("""
+                    INSERT INTO public.material
+                    (subject_id, file_url, file_name, file_type, kind, size, status, expires_at)
+                    VALUES (?, ?, ?, CAST(? AS material_file_type), CAST(? AS material_kind), ?, 'UPLOADED', ?)
+                    """, new String[] {"id"});
+            ps.setLong(1, subjectId); ps.setString(2, reference); ps.setString(3, name);
+            ps.setString(4, type); ps.setString(5, kind); ps.setLong(6, size);
+            ps.setTimestamp(7, Timestamp.from(expires));
+            return ps;
+        }, key);
+        return java.util.Objects.requireNonNull(key.getKey()).longValue();
+    }
+
+    public Material owned(long id, UUID userId) {
+        return jdbc.query("""
+                SELECT m.* FROM public.material m JOIN public.subject s ON s.id = m.subject_id
+                WHERE m.id = ? AND s.user_id = ?
+                """, this::map, id, userId).stream().findFirst().orElseThrow(() -> new ApiException(CommonErrorCode.NOT_FOUND));
+    }
+
+    public void insertFiles(long materialId, java.util.List<String> references) {
+        for (int i = 0; i < references.size(); i++) {
+            jdbc.update("INSERT INTO public.material_file(material_id, page_order, file_url) VALUES (?, ?, ?)",
+                    materialId, i + 1, references.get(i));
+        }
+    }
+
+    /** Also reusable by slice 10: PNG deletion must remove all objects, not just material.file_url. */
+    public java.util.List<String> fileReferences(Material material) {
+        if (!"PNG".equals(material.type())) return java.util.List.of(material.reference());
+        var references = jdbc.queryForList(
+                "SELECT file_url FROM public.material_file WHERE material_id = ? ORDER BY page_order ASC",
+                String.class, material.id());
+        if (references.isEmpty() || references.size() > 20) throw new IllegalStateException("Invalid PNG file references");
+        return references;
+    }
+
+    public Material get(long id) {
+        return jdbc.queryForObject("SELECT * FROM public.material WHERE id = ?", this::map, id);
+    }
+
+    public boolean claim(long id, String expected) {
+        return jdbc.update("""
+                UPDATE public.material SET status = 'PROCESSING', error_message = NULL
+                WHERE id = ? AND status = CAST(? AS material_status) AND expires_at > CURRENT_TIMESTAMP
+                """, id, expected) == 1;
+    }
+
+    public void fail(long id, String message) {
+        jdbc.update("UPDATE public.material SET status = 'FAILED', error_message = ? WHERE id = ? AND status IN ('UPLOADED','PROCESSING')",
+                message, id);
+    }
+
+    public boolean saveResult(long id, MaterialProcessResponse result) {
+        // Lock and transition first; rollback restores PROCESSING if any insert fails.
+        if (jdbc.update("UPDATE public.material SET status = 'READY', page_count = ?, error_message = NULL WHERE id = ? AND status = 'PROCESSING'",
+                result.pageCount(), id) != 1) return false;
+        long subjectId = get(id).subjectId();
+        for (var page : result.pages())
+            jdbc.update("INSERT INTO public.material_page(material_id, page, text) VALUES (?, ?, ?)", id, page.page(), page.text());
+        for (var category : result.categories())
+            jdbc.update("""
+                    INSERT INTO public.category(subject_id, material_id, name, page_start, page_end, summary, "order", question_status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'PREPARING')
+                    """, subjectId, id, category.name(), category.pageStart(), category.pageEnd(), category.summary(), category.order());
+        return true;
+    }
+
+    public int categoryCount(long id) {
+        return jdbc.queryForObject("SELECT count(*) FROM public.category WHERE material_id = ?", Integer.class, id);
+    }
+
+    private Material map(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+        return new Material(rs.getLong("id"), rs.getLong("subject_id"), rs.getString("file_url"),
+                rs.getString("file_name"), rs.getString("file_type"), rs.getString("kind"),
+                rs.getString("status"), rs.getString("error_message"));
+    }
+
+    public record Material(long id, long subjectId, String reference, String name, String type, String kind,
+                           String status, String error) {}
+}
+
