@@ -17,6 +17,7 @@ import com.likelion.commute_study_api.ai.AiErrorCode;
 import com.likelion.commute_study_api.common.config.AiProperties;
 import com.likelion.commute_study_api.common.exception.ApiException;
 import com.likelion.commute_study_api.common.exception.CommonErrorCode;
+import com.likelion.commute_study_api.common.exception.ErrorCode;
 
 /**
  * AI 서버(FastAPI) 호출 공통 처리: X-Internal-Key 헤더, 호출별 타임아웃, 에러 변환.
@@ -103,11 +104,19 @@ public class AiHttpSupport {
 		return switch (aiCode) {
 			case "UNSUPPORTED_FILE", "PAGE_LIMIT_EXCEEDED", "TEXT_EXTRACTION_FAILED", "FILE_FETCH_FAILED" ->
 					new AiCallException(aiCode, message);
-			case "UNAUTHORIZED" -> new ApiException(AiErrorCode.AI_UNAVAILABLE, message);
+			case "UNAUTHORIZED" -> apiException(AiErrorCode.AI_UNAVAILABLE, message);
 			case "INVALID_REQUEST" -> new ApiException(CommonErrorCode.INTERNAL_ERROR, "AI 요청 형식이 잘못됐습니다.");
-			case "LLM_TIMEOUT" -> new ApiException(AiErrorCode.AI_TIMEOUT, message);
-			case "LLM_FAILED" -> new ApiException(AiErrorCode.AI_UNAVAILABLE, message);
-			case null, default -> new ApiException(AiErrorCode.AI_UNAVAILABLE, message);
+			case "LLM_TIMEOUT" -> apiException(AiErrorCode.AI_TIMEOUT, message);
+			case "LLM_FAILED" -> apiException(AiErrorCode.AI_UNAVAILABLE, message);
+			case null, default -> apiException(AiErrorCode.AI_UNAVAILABLE, message);
 		};
+	}
+
+	/**
+	 * AI 서버가 명세 형식이 아닌 에러 바디(예: FastAPI 기본 401 {"detail": ...})를 주면 message가 null이다.
+	 * 그대로 넘기면 로그와 응답에 "null"이 찍히므로 에러 코드의 기본 메시지로 채운다.
+	 */
+	private static ApiException apiException(ErrorCode errorCode, String message) {
+		return new ApiException(errorCode, message != null ? message : errorCode.getMessage());
 	}
 }

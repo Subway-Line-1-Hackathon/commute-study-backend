@@ -115,6 +115,19 @@ class AiHttpSupportTest {
 	}
 
 	@Test
+	void 명세_형식이_아닌_에러_바디면_기본_메시지로_채운다() throws IOException {
+		// 내부 키가 틀렸을 때 FastAPI가 주는 기본 형식
+		server = startServer(401, "{\"detail\":\"Unauthorized\"}");
+		AiHttpSupport support = support(server.getAddress().getPort());
+
+		ApiException e = assertThrows(ApiException.class,
+				() -> support.post("AI-02", "/v1/questions/generate", Map.of(), Object.class, 5));
+
+		assertEquals(AiErrorCode.AI_UNAVAILABLE, e.getErrorCode());
+		assertEquals(AiErrorCode.AI_UNAVAILABLE.getMessage(), e.getMessage());
+	}
+
+	@Test
 	void 응답이_오지_않으면_소켓_타임아웃으로_AI_TIMEOUT이_된다() throws IOException {
 		server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
 		server.createContext("/", exchange -> {
