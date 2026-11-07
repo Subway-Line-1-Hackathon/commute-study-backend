@@ -1,6 +1,7 @@
 package com.likelion.commute_study_api.ai.support;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -9,9 +10,13 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.sun.net.httpserver.HttpServer;
 
@@ -145,5 +150,71 @@ class AiHttpSupportTest {
 				() -> support.post("AI-03", "/v1/answers/judge-short", Map.of(), Object.class, 1));
 
 		assertEquals(AiErrorCode.AI_TIMEOUT, e.getErrorCode());
+	}
+
+	// ---- 개발용 X-Mock-Error 전달 ----
+
+	/** 받은 X-Mock-Error 헤더 값을 기록하는 서버. 헤더가 없으면 null. */
+	private HttpServer startHeaderRecordingServer(AtomicReference<String> received) throws IOException {
+		HttpServer s = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+		s.createContext("/", exchange -> {
+			received.set(exchange.getRequestHeaders().getFirst("X-Mock-Error"));
+			byte[] bytes = "{\"correct\":true,\"reason\":\"ok\"}".getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add("Content-Type", "application/json");
+			exchange.sendResponseHeaders(200, bytes.length);
+			try (OutputStream os = exchange.getResponseBody()) {
+				os.write(bytes);
+			}
+		});
+		s.start();
+		return s;
+	}
+
+	private static void inRequestWithMockError(String value) {
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		if (value != null) {
+			request.addHeader("X-Mock-Error", value);
+		}
+		RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+	}
+
+	@AfterEach
+	void clearRequest() {
+		RequestContextHolder.resetRequestAttributes();
+	}
+
+	private String forwardedHeader(boolean passthrough, String requestHeader, boolean inRequest) throws IOException {
+		AtomicReference<String> received = new AtomicReference<>("(not called)");
+		server = startHeaderRecordingServer(received);
+		AiProperties props = new AiProperties();
+		props.setServerUrl("http://localhost:" + server.getAddress().getPort());
+		props.setInternalKey("test-key");
+		props.setMockErrorPassthrough(passthrough);
+		if (inRequest) {
+			inRequestWithMockError(requestHeader);
+		}
+
+		new AiHttpSupport(props).post("AI-03", "/v1/answers/judge-short", Map.of(), JudgeResponse.class, 5);
+		return received.get();
+	}
+
+	@Test
+	void 설정이_켜져_있으면_요청의_X_Mock_Error를_AI_서버로_넘긴다() throws IOException {
+		assertEquals("LLM_TIMEOUT", forwardedHeader(true, "LLM_TIMEOUT", true));
+	}
+
+	@Test
+	void 설정이_꺼져_있으면_넘기지_않는다() throws IOException {
+		assertNull(forwardedHeader(false, "LLM_TIMEOUT", true));
+	}
+
+	@Test
+	void 에러_코드_형식이_아닌_값은_넘기지_않는다() throws IOException {
+		assertNull(forwardedHeader(true, "llm timeout; x=1", true));
+	}
+
+	@Test
+	void 요청_스레드_밖의_호출은_넘기지_않는다() throws IOException {
+		assertNull(forwardedHeader(true, null, false));
 	}
 }

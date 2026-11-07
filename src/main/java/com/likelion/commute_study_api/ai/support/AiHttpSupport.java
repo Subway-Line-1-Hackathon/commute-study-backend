@@ -2,6 +2,7 @@ package com.likelion.commute_study_api.ai.support;
 
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.likelion.commute_study_api.ai.AiCallException;
 import com.likelion.commute_study_api.ai.AiErrorCode;
@@ -28,6 +31,10 @@ public class AiHttpSupport {
 
 	private static final Logger log = LoggerFactory.getLogger(AiHttpSupport.class);
 
+	/** AI 서버 mock이 실패를 흉내 내는 헤더(AI 서버 ↔ 백엔드 API 명세 1장). */
+	public static final String MOCK_ERROR_HEADER = "X-Mock-Error";
+	private static final Pattern MOCK_ERROR_VALUE = Pattern.compile("[A-Z_]{1,40}");
+
 	private final AiProperties aiProperties;
 
 	public AiHttpSupport(AiProperties aiProperties) {
@@ -42,7 +49,13 @@ public class AiHttpSupport {
 		RestClient client = buildClient(timeoutSeconds);
 		long start = System.currentTimeMillis();
 		try {
-			T result = client.post().uri(path).body(requestBody).retrieve().body(responseType);
+			RestClient.RequestBodySpec request = client.post().uri(path);
+			String mockError = mockErrorToForward();
+			if (mockError != null) {
+				request = request.header(MOCK_ERROR_HEADER, mockError);
+				log.warn("[{}] 개발용 X-Mock-Error 전달 code={}", featureId, mockError);
+			}
+			T result = request.body(requestBody).retrieve().body(responseType);
 			log.info("[{}] AI 호출 성공 elapsedMs={}", featureId, System.currentTimeMillis() - start);
 			return result;
 		} catch (RestClientResponseException e) {
@@ -59,6 +72,25 @@ public class AiHttpSupport {
 			log.error("[{}] AI 서버 연결 실패 elapsedMs={} msg={}", featureId, elapsedMs, e.getMessage());
 			throw new ApiException(AiErrorCode.AI_UNAVAILABLE);
 		}
+	}
+
+	/**
+	 * ai.mock-error-passthrough가 켜져 있고 지금 처리 중인 사용자 요청에 X-Mock-Error가 있으면 그 값을 돌려준다.
+	 * 요청 스레드 밖(aiExecutor 비동기 호출, 스케줄러)에서는 요청이 없으므로 넘기지 않는다.
+	 * 값은 AI 에러 코드 형식(대문자·밑줄)만 받아 다른 헤더 값이 섞여 들어가지 않게 한다.
+	 */
+	String mockErrorToForward() {
+		if (!aiProperties.isMockErrorPassthrough()) {
+			return null;
+		}
+		if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
+			return null;
+		}
+		String value = attributes.getRequest().getHeader(MOCK_ERROR_HEADER);
+		if (value == null || !MOCK_ERROR_VALUE.matcher(value).matches()) {
+			return null;
+		}
+		return value;
 	}
 
 	private boolean containsSocketTimeout(Throwable e) {
