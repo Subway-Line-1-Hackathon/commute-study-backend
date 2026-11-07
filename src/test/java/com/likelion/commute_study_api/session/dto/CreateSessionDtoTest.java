@@ -144,11 +144,12 @@ class CreateSessionDtoTest {
 
 	@Test
 	void 선택_필드가_없으면_JSON에서_빠진다() {
-		CreateSessionResponse response = new CreateSessionResponse(10, StudyMode.REVIEW, 19, 0,
+		CreateSessionResponse response = new CreateSessionResponse(null, StudyMode.REVIEW, 19, 0,
 				null, null, true, List.of());
 
 		String json = mapper.writeValueAsString(response);
 
+		assertFalse(json.contains("sessionId"));
 		assertFalse(json.contains("summary"));
 		assertFalse(json.contains("shortage"));
 		assertTrue(json.contains("\"noReviewItems\":true"));
@@ -157,7 +158,7 @@ class CreateSessionDtoTest {
 
 	@Test
 	void shortage가_있으면_세_필드를_내려준다() {
-		CreateSessionResponse response = new CreateSessionResponse(10, StudyMode.CURRICULUM, 30, 12,
+		CreateSessionResponse response = new CreateSessionResponse(10L, StudyMode.CURRICULUM, 30, 12,
 				"요약", new Shortage(27, 12, true), null, List.of());
 
 		String json = mapper.writeValueAsString(response);

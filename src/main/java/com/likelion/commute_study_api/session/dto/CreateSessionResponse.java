@@ -10,11 +10,12 @@ import com.likelion.commute_study_api.common.study.StudyMode;
  *
  * @param summary       CURRICULUM이면 고른 단원 요약을 단원 순서대로 이어 붙인 것. REVIEW·skipSummary면 없음
  * @param shortage      목표보다 문제가 적을 때만
+ * @param sessionId     noReviewItems면 풀 문제가 없어 세션을 저장하지 않으므로 없음
  * @param noReviewItems REVIEW인데 푼 문제가 하나도 없을 때만 true
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record CreateSessionResponse(
-		long sessionId,
+		Long sessionId,
 		StudyMode mode,
 		int studyMin,
 		int questionCount,
