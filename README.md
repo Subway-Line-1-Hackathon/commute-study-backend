@@ -9,6 +9,9 @@ Spring Boot 4.1.2 + PostgreSQL(Supabase) 기반 API 서버. Railway 로 배포�
 | [백엔드 개발 명세서](docs/백엔드_개발_명세서.md) | 범위, 시스템 구성, 인증, 설정값, 데이터 모델, API, 핵심 로직, 개발 순서, 완료 체크리스트 |
 | [AI 서버 ↔ 백엔드 API 명세](docs/AI_서버_백엔드_API_명세.md) | 백엔드가 AI 서버(FastAPI)를 호출하는 API의 요청·응답, 에러, 타임아웃, AI 담당과 합의 필요 항목 |
 
+슬라이스 5의 신규 API, CurrentUser 재사용 방법과 검증 범위는
+[사용자 자동 생성·내 정보 조회 안내](docs/슬라이스5_사용자_조회.md)를 참고한다.
+
 ## 요구 사항
 
 - JDK 21

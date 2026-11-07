@@ -1,6 +1,7 @@
 
 package com.likelion.commute_study_api.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 import java.util.LinkedHashMap;
@@ -25,6 +26,7 @@ public class AuthController {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    @Operation(deprecated = true, description = "GET /api/users/me로 전환해주세요.")
     @GetMapping("/me")
     public Map<String, Object> me(@AuthenticationPrincipal Jwt jwt) {
 

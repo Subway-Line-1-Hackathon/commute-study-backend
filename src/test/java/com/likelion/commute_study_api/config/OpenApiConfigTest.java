@@ -41,6 +41,8 @@ class OpenApiConfigTest {
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"))
                 .andExpect(jsonPath("$.paths['/api/auth/me'].get.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/auth/me'].get.deprecated").value(true))
+                .andExpect(jsonPath("$.paths['/api/users/me'].get.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/users/me/nickname'].get.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/users/me/nickname'].put.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/users/me/nickname'].put.requestBody.content['application/json'].example.nickname").value("동현"));
