@@ -73,7 +73,7 @@ public class SessionController {
 			 "summary":"- 스택은 LIFO, 큐는 FIFO",
 			 "shortage":{"target":27,"available":2,"allSolved":false},
 			 "questions":[
-			   {"id":101,"type":"MC","stem":"큐의 특징은?","choices":["LIFO","FIFO"],"sourcePage":2,"answer":"FIFO","explanation":"큐는 먼저 넣은 것이 먼저 나온다."},
+			   {"id":101,"type":"MC","stem":"큐의 특징은?","choices":["LIFO","FIFO"],"sourcePage":2,"answer":"2","explanation":"큐는 먼저 넣은 것이 먼저 나온다."},
 			   {"id":102,"type":"SHORT","stem":"스택의 삽입 연산 이름은?","sourcePage":1}
 			 ]}
 			""")))
