@@ -14,5 +14,7 @@ CREATE TABLE public.commute_profile (
 CREATE TABLE public.subject (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES public.app_user(id),
-    name VARCHAR(100) NOT NULL
+    name VARCHAR(100) NOT NULL,
+    exam_date DATE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
