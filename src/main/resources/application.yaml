@@ -89,6 +89,10 @@ upload:
   allowed-types: PDF,PPTX,PNG
 
 material:
+  # One gate covers scheduled and post-commit cleanup; never enable on shared-DB local development.
+  cleanup-enabled: ${MATERIAL_CLEANUP_ENABLED:false}
+  cleanup-cron: "0 0 3 * * *"
+  recovery-check-interval: 1m
   retention-days: 7
   max-per-user: 10
   processing-timeout-minutes: 10

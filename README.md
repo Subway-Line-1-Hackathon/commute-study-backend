@@ -189,6 +189,9 @@ forwarded 헤더는 신뢰하는 프록시가 외부 입력을 정리해 전달�
 
 ## DB 스키마 운영
 
+자료 자동 만료·Storage 정리 설정과 V5 배포 순서는 [슬라이스 10 운영 안내](docs/슬라이스10_자료_정리.md)를 참고한다.
+공유 DB를 사용하는 로컬에서는 `MATERIAL_CLEANUP_ENABLED=false`를 유지한다(기본값).
+
 공용 Supabase DB를 2명이 함께 쓰므로, 스키마 변경은 **Flyway 마이그레이션 파일로만** 한다.
 
 - `spring.jpa.hibernate.ddl-auto` 는 `validate` 로 고정한다. Hibernate는 엔티티와 실제 스키마가 일치하는지만 검증하고, 스키마를 직접 바꾸지 않는다.

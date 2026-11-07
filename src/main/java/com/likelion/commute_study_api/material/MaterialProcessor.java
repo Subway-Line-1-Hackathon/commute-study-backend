@@ -27,7 +27,7 @@ public class MaterialProcessor {
     private final AiProperties aiProperties;
     private final MaterialProperties properties;
     private final Executor executor;
-    private final ConcurrentHashMap<Long, Object> inFlight = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<java.util.UUID, Object> inFlight = new ConcurrentHashMap<>();
 
     public MaterialProcessor(MaterialRepository repository, MaterialTransactions transactions, MaterialStorage storage,
                              MaterialAiClient ai, AiProperties aiProperties, MaterialProperties properties,
@@ -40,14 +40,14 @@ public class MaterialProcessor {
     public void queued(MaterialQueuedEvent event) {
         long id = event.materialId();
         Object attempt = new Object();
-        if (inFlight.putIfAbsent(id, attempt) != null) return;
+        if (inFlight.putIfAbsent(event.token(), attempt) != null) return;
         var stopped = new AtomicBoolean();
         try {
             CompletableFuture.supplyAsync(() -> {
                 if (stopped.get()) return null;
-                if (!event.retry() && !transactions.claimUpload(id)) return null;
+                if (!event.retry() && !transactions.claimUpload(id, event.token())) return null;
                 var material = repository.get(id);
-                return "PROCESSING".equals(material.status()) ? material : null;
+                return "PROCESSING".equals(material.status()) && event.token().equals(repository.processingToken(id)) ? material : null;
             }, executor).thenCompose(material -> material == null || stopped.get()
                     ? CompletableFuture.<MaterialProcessResponse>completedFuture(null) : call(material, 0, stopped))
                     .orTimeout(properties.getProcessingTimeoutMinutes(), TimeUnit.MINUTES)
@@ -55,19 +55,19 @@ public class MaterialProcessor {
                         stopped.set(true);
                         try {
                             if (failure != null) {
-                                inFlight.remove(id, attempt);
-                                markFailed(id, failure);
+                                inFlight.remove(event.token(), attempt);
+                                markFailed(id, event.token(), failure);
                             }
                             else if (response != null) {
-                                try { transactions.complete(id, response); }
-                                catch (Exception e) { inFlight.remove(id, attempt); markFailed(id, e); }
+                                try { transactions.complete(id, event.token(), response); }
+                                catch (Exception e) { inFlight.remove(event.token(), attempt); markFailed(id, event.token(), e); }
                             }
-                        } finally { inFlight.remove(id, attempt); }
+                        } finally { inFlight.remove(event.token(), attempt); }
                     });
         } catch (Exception e) {
             stopped.set(true);
-            inFlight.remove(id, attempt);
-            markFailed(id, e);
+            inFlight.remove(event.token(), attempt);
+            markFailed(id, event.token(), e);
         }
     }
 
@@ -91,8 +91,8 @@ public class MaterialProcessor {
         } catch (Exception e) { return CompletableFuture.failedFuture(e); }
     }
 
-    private void markFailed(long id, Throwable failure) {
-        try { transactions.failed(id, safeMessage(unwrap(failure))); }
+    private void markFailed(long id, java.util.UUID token, Throwable failure) {
+        try { transactions.failed(id, token, safeMessage(unwrap(failure))); }
         catch (Exception ignored) {
             // DB outage cannot be repaired here. Never log raw SQL arguments, signed URLs, or AI content.
             log.error("자료 실패 상태 저장 불가 materialId={}", id);

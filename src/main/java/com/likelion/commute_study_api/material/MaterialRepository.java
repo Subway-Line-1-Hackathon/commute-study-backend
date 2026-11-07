@@ -59,22 +59,33 @@ public class MaterialRepository {
         return jdbc.queryForObject("SELECT * FROM public.material WHERE id = ?", this::map, id);
     }
 
-    public boolean claim(long id, String expected) {
+    public boolean claim(long id, String expected, UUID token) {
         return jdbc.update("""
-                UPDATE public.material SET status = 'PROCESSING', error_message = NULL
-                WHERE id = ? AND status = CAST(? AS material_status) AND expires_at > CURRENT_TIMESTAMP
-                """, id, expected) == 1;
+                UPDATE public.material SET status = 'PROCESSING', error_message = NULL,
+                    processing_started_at = CURRENT_TIMESTAMP, processing_token = ?
+                WHERE id = ? AND status = CAST(? AS material_status) AND expires_at > CURRENT_TIMESTAMP AND cleanup_pending = false
+                """, token, id, expected) == 1;
     }
 
-    public void fail(long id, String message) {
-        jdbc.update("UPDATE public.material SET status = 'FAILED', error_message = ? WHERE id = ? AND status IN ('UPLOADED','PROCESSING')",
-                message, id);
+    public UUID processingToken(long id) {
+        return jdbc.queryForObject("SELECT processing_token FROM public.material WHERE id = ?", UUID.class, id);
     }
 
-    public boolean saveResult(long id, MaterialProcessResponse result) {
+    public boolean fail(long id, UUID token, String message) {
+        return jdbc.update("""
+                UPDATE public.material SET status = 'FAILED', error_message = ?, processing_started_at = NULL, processing_token = NULL
+                WHERE id = ? AND cleanup_pending = false
+                  AND (status = 'UPLOADED' OR (status = 'PROCESSING' AND processing_token = ?))
+                """, message, id, token) == 1;
+    }
+
+    public boolean saveResult(long id, UUID token, MaterialProcessResponse result) {
         // Lock and transition first; rollback restores PROCESSING if any insert fails.
-        if (jdbc.update("UPDATE public.material SET status = 'READY', page_count = ?, error_message = NULL WHERE id = ? AND status = 'PROCESSING'",
-                result.pageCount(), id) != 1) return false;
+        if (jdbc.update("""
+                UPDATE public.material SET status = 'READY', page_count = ?, error_message = NULL,
+                    processing_started_at = NULL, processing_token = NULL
+                WHERE id = ? AND status = 'PROCESSING' AND processing_token = ? AND cleanup_pending = false
+                """, result.pageCount(), id, token) != 1) return false;
         long subjectId = get(id).subjectId();
         for (var page : result.pages())
             jdbc.update("INSERT INTO public.material_page(material_id, page, text) VALUES (?, ?, ?)", id, page.page(), page.text());

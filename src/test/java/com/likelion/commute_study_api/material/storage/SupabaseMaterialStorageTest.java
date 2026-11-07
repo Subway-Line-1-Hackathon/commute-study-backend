@@ -18,6 +18,8 @@ class SupabaseMaterialStorageTest {
     boolean publicBucket;
     boolean redirect;
     String signedOverride;
+    int deleteStatus = 200;
+    String deleteBody = "{}";
     volatile String authorization;
     volatile String apiKey;
     volatile String signBody;
@@ -32,7 +34,8 @@ class SupabaseMaterialStorageTest {
             authorization=exchange.getRequestHeaders().getFirst("Authorization");
             apiKey=exchange.getRequestHeaders().getFirst("apikey");
             int status=200; String body="{}";
-            if(path.contains("/bucket/")) body="{\"public\":"+publicBucket+"}";
+            if(exchange.getRequestMethod().equals("DELETE")) { status=deleteStatus; body=deleteBody; }
+            else if(path.contains("/bucket/")) body="{\"public\":"+publicBucket+"}";
             else if(path.contains("/object/sign/")) {
                 signBody=new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8);
                 String signed=signedOverride==null?path.substring("/storage/v1".length())+"?token=SECRET":signedOverride;
@@ -52,6 +55,24 @@ class SupabaseMaterialStorageTest {
         storage=new SupabaseMaterialStorage(properties);
     }
     @AfterEach void stop() { server.stop(0); }
+
+    @Test void missingObjectsAreIdempotentButBucketAndPermissionFailuresAreNot() {
+        String ref=storage.reference(UUID.randomUUID(),"png");
+        for(int status:List.of(400,404)) {
+            deleteStatus=status; deleteBody="{\"code\":\"NoSuchKey\"}";
+            assertThatCode(() -> storage.delete(ref)).doesNotThrowAnyException();
+        }
+        for(String code:List.of("NoSuchBucket","AccessDenied","UnknownError")) {
+            deleteStatus=404; deleteBody="{\"code\":\""+code+"\",\"message\":\"SECRET\"}";
+            assertThatThrownBy(() -> storage.delete(ref)).isInstanceOf(ApiException.class).hasMessageNotContaining("SECRET");
+        }
+        for(int status:List.of(401,403,500)) {
+            deleteStatus=status; deleteBody="{\"code\":\"NoSuchKey\"}";
+            assertThatThrownBy(() -> storage.delete(ref)).isInstanceOf(ApiException.class);
+        }
+        deleteStatus=404; deleteBody="not json";
+        assertThatThrownBy(() -> storage.delete(ref)).isInstanceOf(ApiException.class);
+    }
 
     @Test
     void privateUploadSignAndDeleteUseServerCredentialsAndOpaqueReference() {
