@@ -19,8 +19,6 @@ import org.springframework.stereotype.Service;
 import com.likelion.commute_study_api.ai.question.QuestionAiClient;
 import com.likelion.commute_study_api.ai.question.QuestionGenerateRequest;
 import com.likelion.commute_study_api.ai.question.QuestionGenerateRequest.TypeRequest;
-import com.likelion.commute_study_api.ai.question.QuestionGenerateResponse;
-import com.likelion.commute_study_api.ai.question.QuestionGenerateResponse.GeneratedQuestion;
 import com.likelion.commute_study_api.ai.support.AiAsyncConfig;
 import com.likelion.commute_study_api.ai.support.AiPage;
 import com.likelion.commute_study_api.common.config.QuestionProperties;
@@ -45,6 +43,7 @@ public class QuestionPregenService {
 	private final QuestionProperties questionProperties;
 	private final Executor aiExecutor;
 	private final PregenFailureTracker failureTracker;
+	private final GeneratedQuestionWriter writer;
 	private final Clock clock;
 
 	// 이벤트와 재시도 스케줄러가 같은 단원을 동시에 잡지 않게 막는다(서버 메모리, 재시작하면 비워짐).
@@ -56,9 +55,10 @@ public class QuestionPregenService {
 			QuestionAiClient questionAiClient,
 			QuestionProperties questionProperties,
 			@Qualifier(AiAsyncConfig.AI_EXECUTOR) Executor aiExecutor,
-			PregenFailureTracker failureTracker
+			PregenFailureTracker failureTracker,
+			GeneratedQuestionWriter writer
 	) {
-		this(repository, questionAiClient, questionProperties, aiExecutor, failureTracker, Clock.systemUTC());
+		this(repository, questionAiClient, questionProperties, aiExecutor, failureTracker, writer, Clock.systemUTC());
 	}
 
 	QuestionPregenService(
@@ -67,6 +67,7 @@ public class QuestionPregenService {
 			QuestionProperties questionProperties,
 			Executor aiExecutor,
 			PregenFailureTracker failureTracker,
+			GeneratedQuestionWriter writer,
 			Clock clock
 	) {
 		this.repository = repository;
@@ -74,6 +75,7 @@ public class QuestionPregenService {
 		this.questionProperties = questionProperties;
 		this.aiExecutor = aiExecutor;
 		this.failureTracker = failureTracker;
+		this.writer = writer;
 		this.clock = clock;
 	}
 
@@ -135,7 +137,7 @@ public class QuestionPregenService {
 				repository.findRecentStems(category.id(), EXCLUDE_STEMS_LIMIT)
 		);
 		return questionAiClient.generate(request).thenCompose(response -> {
-			save(category, response);
+			writer.save(category, response, ORIGIN_PREGEN);
 			return runRound(category, pages, round + 1);
 		});
 	}
@@ -154,23 +156,7 @@ public class QuestionPregenService {
 		return missing;
 	}
 
-	private void save(CategoryTarget category, QuestionGenerateResponse response) {
-		List<GeneratedQuestion> generated = response.questions() == null ? List.of() : response.questions();
-		List<GeneratedQuestion> valid = generated.stream()
-				.filter(q -> category.isPageInRange(q.sourcePage()))
-				.toList();
-		int dropped = generated.size() - valid.size();
-		if (dropped > 0) {
-			log.warn("[AI-02] 근거 쪽수가 단원 범위 밖이라 버림 categoryId={} dropped={}", category.id(), dropped);
-		}
-		if (!valid.isEmpty()) {
-			repository.insertQuestions(category.id(), ORIGIN_PREGEN, valid);
-		}
-		log.info("[AI-02] 문제 저장 categoryId={} saved={} shortfall={} rejected={}",
-				category.id(), valid.size(), response.shortfall(), response.rejected());
-	}
-
-	private static String rootMessage(Throwable ex) {
+	static String rootMessage(Throwable ex) {
 		Throwable cur = ex;
 		while (cur.getCause() != null) {
 			cur = cur.getCause();
