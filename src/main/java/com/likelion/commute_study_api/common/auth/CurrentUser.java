@@ -24,6 +24,13 @@ public class CurrentUser {
      */
     @Transactional
     public UUID ensureUser(Jwt jwt) {
+        UUID userId = authenticatedId(jwt);
+        userRepository.createIfAbsent(userId);
+        return userId;
+    }
+
+    /** Extract identity from a Spring Security verified JWT without creating a database row. */
+    public UUID authenticatedId(Jwt jwt) {
         if (jwt == null || jwt.getSubject() == null) {
             throw new ApiException(CommonErrorCode.UNAUTHORIZED);
         }
@@ -33,7 +40,6 @@ public class CurrentUser {
         } catch (IllegalArgumentException e) {
             throw new ApiException(CommonErrorCode.UNAUTHORIZED);
         }
-        userRepository.createIfAbsent(userId);
         return userId;
     }
 }
