@@ -66,6 +66,9 @@ study:
 
 question:
   pregen-total: 40
+  # 사전 생성 난이도·부족분 재요청 횟수는 기획·AI 담당과 확정 전 임시값 (#24 HITL)
+  pregen-difficulty: 2
+  pregen-refill-max: 2
   max-per-category-difficulty: 60
   pregen-ratio:
     ox: 14

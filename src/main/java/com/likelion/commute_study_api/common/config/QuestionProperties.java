@@ -14,6 +14,8 @@ import lombok.Setter;
 public class QuestionProperties {
 
 	private int pregenTotal = 40;
+	private int pregenDifficulty = 2;
+	private int pregenRefillMax = 2;
 	private int maxPerCategoryDifficulty = 60;
 
 	// 키: ox/mc/short
