@@ -1,8 +1,11 @@
 package com.likelion.commute_study_api.session.controller;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,6 +14,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.likelion.commute_study_api.session.dto.CreateSessionRequest;
 import com.likelion.commute_study_api.session.dto.CreateSessionResponse;
+import com.likelion.commute_study_api.session.dto.CurrentSessionResponse;
+import com.likelion.commute_study_api.session.dto.EndSessionRequest;
+import com.likelion.commute_study_api.session.dto.EndSessionResponse;
+import com.likelion.commute_study_api.session.dto.StartSessionResponse;
+import com.likelion.commute_study_api.session.service.SessionProgressService;
 import com.likelion.commute_study_api.session.service.SessionService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,9 +36,11 @@ import jakarta.validation.Valid;
 public class SessionController {
 
 	private final SessionService sessionService;
+	private final SessionProgressService progressService;
 
-	public SessionController(SessionService sessionService) {
+	public SessionController(SessionService sessionService, SessionProgressService progressService) {
 		this.sessionService = sessionService;
+		this.progressService = progressService;
 	}
 
 	@Operation(summary = "오늘의 커리큘럼 생성", description = """
@@ -80,5 +90,62 @@ public class SessionController {
 	public CreateSessionResponse create(@AuthenticationPrincipal Jwt jwt,
 			@Valid @RequestBody CreateSessionRequest request) {
 		return sessionService.create(jwt, request);
+	}
+
+	@Operation(summary = "이어하기용 진행 중 세션", description = """
+			앱을 다시 열었을 때 이어하기 팝업에 쓴다. 진행 중(IN_PROGRESS) 세션이 없으면 204.
+
+			- `answered`는 서버에 저장된 응답 수다. 세션 문제 순서에서 `answered`개 다음 문제부터 이어 푼다
+			- 시작한 날(KST)이 지났으면 세션을 `ENDED`로 바꾸고 204를 준다
+			- 타이머는 서버가 보관하지 않는다. 이어 풀 때 앱이 새로 시작한다
+			""")
+	@ApiResponse(responseCode = "200", description = "진행 중 세션", content = @Content(
+			mediaType = "application/json", examples = @ExampleObject(value = """
+			{"sessionId":12,"categoryNames":["스택","큐"],"answered":7,"total":27}
+			""")))
+	@ApiResponse(responseCode = "204", description = "진행 중 세션 없음(또는 다음 날이 되어 자동 종료됨)", content = @Content)
+	@GetMapping("/current")
+	public ResponseEntity<CurrentSessionResponse> current(@AuthenticationPrincipal Jwt jwt) {
+		return progressService.current(jwt)
+				.map(ResponseEntity::ok)
+				.orElseGet(() -> ResponseEntity.noContent().build());
+	}
+
+	@Operation(summary = "세션 시작(출발)", description = """
+			READY 세션을 IN_PROGRESS로 바꾸고 시작 시각을 기록한다.
+			이미 진행 중인 다른 세션이 있으면 그 세션을 먼저 `ENDED`(새로 시작)로 끝낸다. 사용자당 진행 중 세션은 1개다.
+			""")
+	@ApiResponse(responseCode = "200", description = "시작됨", content = @Content(
+			mediaType = "application/json", examples = @ExampleObject(value = """
+			{"status":"IN_PROGRESS","startedAt":"2026-11-08T01:00:00Z"}
+			""")))
+	@ApiResponse(responseCode = "404", description = "NOT_FOUND: 없거나 다른 사용자의 세션", content = @Content)
+	@ApiResponse(responseCode = "409", description = "STATE_CONFLICT: READY가 아닌 세션(`details.status`에 현재 상태), 동시에 다른 세션 시작",
+			content = @Content)
+	@PostMapping("/{id}/start")
+	public StartSessionResponse start(@AuthenticationPrincipal Jwt jwt, @PathVariable("id") long id) {
+		return progressService.start(jwt, id);
+	}
+
+	@Operation(summary = "세션 종료", description = """
+			진행 중 세션을 `ENDED`로 바꾼다. `reason`: `QUIT`(그만하기), `ARRIVED`(도착), `NEW_START`(이어하기 팝업에서 새로 시작).
+			마지막 문제까지 풀면 답안 저장에서 자동으로 `COMPLETED`가 되므로 이 API를 부르지 않아도 된다.
+			이미 끝난 세션이면 그 상태(`COMPLETED`/`ENDED`)를 그대로 준다(다시 보내도 안전).
+			""")
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(
+			mediaType = "application/json", examples = @ExampleObject(value = """
+			{"reason":"QUIT"}
+			""")))
+	@ApiResponse(responseCode = "200", description = "종료됨", content = @Content(
+			mediaType = "application/json", examples = @ExampleObject(value = """
+			{"status":"ENDED"}
+			""")))
+	@ApiResponse(responseCode = "400", description = "VALIDATION_ERROR: reason 없음·모르는 값", content = @Content)
+	@ApiResponse(responseCode = "404", description = "NOT_FOUND: 없거나 다른 사용자의 세션", content = @Content)
+	@ApiResponse(responseCode = "409", description = "STATE_CONFLICT: 출발하지 않은(READY) 세션", content = @Content)
+	@PostMapping("/{id}/end")
+	public EndSessionResponse end(@AuthenticationPrincipal Jwt jwt, @PathVariable("id") long id,
+			@Valid @RequestBody EndSessionRequest request) {
+		return progressService.end(jwt, id, request.reason());
 	}
 }
