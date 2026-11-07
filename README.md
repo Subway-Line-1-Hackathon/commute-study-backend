@@ -16,6 +16,9 @@ Spring Boot 4.1.2 + PostgreSQL(Supabase) 기반 API 서버. Railway 로 배포�
 
 슬라이스 7의 과목 API와 D-Day·소유권 검증은 [과목 등록·목록 안내](docs/슬라이스7_과목.md)를 참고한다.
 
+슬라이스 8의 API·Storage 환경변수·슬라이스 9 연동·PNG 최대 20장 계약은
+[자료 업로드·단원화 안내](docs/슬라이스8_자료_업로드.md)를 참고한다.
+
 ## 요구 사항
 
 - JDK 21

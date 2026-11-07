@@ -30,10 +30,13 @@ spring:
 
   servlet:
     multipart:
+      # Keep accepted multipart payloads in memory; never persist lecture files on server disk.
+      file-size-threshold: 35MB
       # 업로드 한도(30MB)보다 크게 잡아, 초과 거부는 프레임워크가 아니라
       # 애플리케이션 코드가 FILE_TOO_LARGE로 먼저 하게 한다(명세서 10장).
       max-file-size: 35MB
-      max-request-size: 35MB
+      # PNG 20 x 30MiB plus multipart overhead. Each file is still checked against 30MiB.
+      max-request-size: 605MB
 
 server:
   port: ${PORT:8080}
@@ -101,7 +104,7 @@ ai:
   server-url: ${AI_SERVER_URL:http://localhost:8000}
   internal-key: ${AI_INTERNAL_KEY:}
   max-concurrency: 3
-  signed-url-ttl-minutes: 10
+  signed-url-ttl-minutes: ${AI_SIGNED_URL_TTL_MINUTES:10}
   question-daily-limit: 20
   timeout:
     health: 5
@@ -111,3 +114,9 @@ ai:
     ai03: 5
     ai05: 15
     ai06: 15
+
+storage:
+  url: ${SUPABASE_URL:}
+  bucket: ${SUPABASE_STORAGE_BUCKET:}
+  key: ${SUPABASE_STORAGE_KEY:}
+  expected-host: ${SUPABASE_HOST:}

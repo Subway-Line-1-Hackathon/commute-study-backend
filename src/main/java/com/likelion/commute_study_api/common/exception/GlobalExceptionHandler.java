@@ -34,11 +34,17 @@ public class GlobalExceptionHandler {
 				.body(ErrorResponse.of(CommonErrorCode.VALIDATION_ERROR, CommonErrorCode.VALIDATION_ERROR.getMessage(), details));
 	}
 
-	// 업로드 기능(material 도메인)이 생기면 FILE_TOO_LARGE 전용 코드로 옮긴다.
 	@ExceptionHandler(MaxUploadSizeExceededException.class)
 	public ResponseEntity<ErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException e) {
-		return ResponseEntity.status(CommonErrorCode.VALIDATION_ERROR.getStatus())
-				.body(ErrorResponse.of(CommonErrorCode.VALIDATION_ERROR, "파일 용량이 한도를 초과했습니다.", null));
+		var code = com.likelion.commute_study_api.material.MaterialErrorCode.FILE_TOO_LARGE;
+		return ResponseEntity.status(code.getStatus()).body(ErrorResponse.of(code));
+	}
+
+	@ExceptionHandler({org.springframework.web.bind.MissingServletRequestParameterException.class,
+			org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+			org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
+	public ResponseEntity<ErrorResponse> handleRequestBinding(Exception e) {
+		return ResponseEntity.badRequest().body(ErrorResponse.of(CommonErrorCode.VALIDATION_ERROR));
 	}
 
 	@ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
