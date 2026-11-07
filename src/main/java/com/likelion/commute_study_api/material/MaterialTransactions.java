@@ -40,21 +40,26 @@ public class MaterialTransactions {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void retry(long id, UUID userId) {
         repository.owned(id, userId);
-        if (!repository.claim(id, "FAILED")) throw new ApiException(CommonErrorCode.STATE_CONFLICT);
-        events.publishEvent(new MaterialQueuedEvent(id, true));
+        var event = new MaterialQueuedEvent(id, true);
+        if (!repository.claim(id, "FAILED", event.token())) throw new ApiException(CommonErrorCode.STATE_CONFLICT);
+        events.publishEvent(event);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean claimUpload(long id) { return repository.claim(id, "UPLOADED"); }
+    public boolean claimUpload(long id, UUID token) { return repository.claim(id, "UPLOADED", token); }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void failed(long id, String message) { repository.fail(id, message); }
+    public void failed(long id, UUID token, String message) {
+        if (repository.fail(id, token, message)) events.publishEvent(new MaterialSettledEvent(id));
+    }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void complete(long id, MaterialProcessResponse result) {
+    public void complete(long id, UUID token, MaterialProcessResponse result) {
         validator.validate(result);
-        if (repository.saveResult(id, result))
+        if (repository.saveResult(id, token, result)) {
             events.publishEvent(new MaterialProcessedEvent(id, repository.get(id).subjectId()));
+            events.publishEvent(new MaterialSettledEvent(id));
+        }
     }
 }
 

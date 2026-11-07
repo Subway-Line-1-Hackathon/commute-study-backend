@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.url=jdbc:h2:mem:materials;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000",
         "spring.datasource.username=sa", "spring.datasource.password=", "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.flyway.enabled=false", "spring.data.jpa.repositories.enabled=false",
-        "spring.sql.init.mode=always", "spring.sql.init.schema-locations=classpath:material-test-schema.sql,classpath:db/migration/V4__add_material_file.sql",
+        "spring.sql.init.mode=always", "spring.sql.init.schema-locations=classpath:material-test-schema.sql,classpath:db/migration/V4__add_material_file.sql,classpath:db/migration/V5__add_material_lifecycle_tracking.sql",
         "spring.autoconfigure.exclude=org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration"
 })
 @AutoConfigureMockMvc
@@ -104,7 +104,7 @@ class MaterialPipelineTest {
         questionResult.complete(generated(captured.get()));
         available();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM question", Integer.class)).isEqualTo(40);
-        transactions.complete(id, result("중복", 1, 2));
+        transactions.complete(id, UUID.randomUUID(), result("중복", 1, 2));
         verify(listener, times(1)).onMaterialProcessed(any());
         mvc.perform(get("/api/materials/{id}/status", id).with(jwt().jwt(j -> j.subject(USER.toString()))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("READY"))

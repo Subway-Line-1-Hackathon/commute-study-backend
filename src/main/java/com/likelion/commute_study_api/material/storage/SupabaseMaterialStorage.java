@@ -57,7 +57,13 @@ public class SupabaseMaterialStorage implements MaterialStorage {
 
     public void delete(String reference) {
         try {
-            client().delete().uri("/object/" + safeReference(reference)).retrieve().toBodilessEntity();
+            client().delete().uri("/object/" + safeReference(reference)).retrieve()
+                    .onStatus(status -> status.value() == 400 || status.value() == 404, (request, response) -> {
+                        var body = new tools.jackson.databind.ObjectMapper().readTree(response.getBody());
+                        var code = body == null ? null : body.get("code");
+                        // Do not interpret missing bucket, authentication failure, or generic 404 as success.
+                        if (code == null || !code.isString() || !"NoSuchKey".equals(code.stringValue())) throw unavailable();
+                    }).toBodilessEntity();
         } catch (Exception e) { throw unavailable(); }
     }
 
