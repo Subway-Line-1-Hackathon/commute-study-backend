@@ -1,5 +1,6 @@
 package com.likelion.commute_study_api.question.service;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -11,6 +12,7 @@ import java.util.concurrent.Executor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -42,20 +44,37 @@ public class QuestionPregenService {
 	private final QuestionAiClient questionAiClient;
 	private final QuestionProperties questionProperties;
 	private final Executor aiExecutor;
+	private final PregenFailureTracker failureTracker;
+	private final Clock clock;
 
 	// 이벤트와 재시도 스케줄러가 같은 단원을 동시에 잡지 않게 막는다(서버 메모리, 재시작하면 비워짐).
 	private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
+	@Autowired
 	public QuestionPregenService(
 			QuestionGenerationRepository repository,
 			QuestionAiClient questionAiClient,
 			QuestionProperties questionProperties,
-			@Qualifier(AiAsyncConfig.AI_EXECUTOR) Executor aiExecutor
+			@Qualifier(AiAsyncConfig.AI_EXECUTOR) Executor aiExecutor,
+			PregenFailureTracker failureTracker
+	) {
+		this(repository, questionAiClient, questionProperties, aiExecutor, failureTracker, Clock.systemUTC());
+	}
+
+	QuestionPregenService(
+			QuestionGenerationRepository repository,
+			QuestionAiClient questionAiClient,
+			QuestionProperties questionProperties,
+			Executor aiExecutor,
+			PregenFailureTracker failureTracker,
+			Clock clock
 	) {
 		this.repository = repository;
 		this.questionAiClient = questionAiClient;
 		this.questionProperties = questionProperties;
 		this.aiExecutor = aiExecutor;
+		this.failureTracker = failureTracker;
+		this.clock = clock;
 	}
 
 	/**
@@ -79,10 +98,12 @@ public class QuestionPregenService {
 					inFlight.remove(category.id());
 					long elapsedMs = System.currentTimeMillis() - start;
 					if (ex != null) {
+						failureTracker.recordFailure(category.id(), clock.instant());
 						log.error("[AI-02] 사전 생성 실패 categoryId={} elapsedMs={} cause={}",
 								category.id(), elapsedMs, rootMessage(ex));
 						return false;
 					}
+					failureTracker.clear(category.id());
 					log.info("[AI-02] 사전 생성 완료 categoryId={} elapsedMs={}", category.id(), elapsedMs);
 					return true;
 				});

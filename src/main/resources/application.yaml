@@ -70,6 +70,12 @@ question:
   pregen-difficulty: 2
   pregen-refill-max: 2
   max-per-category-difficulty: 60
+  # 실패 단원 재시도 스케줄러. 팀 공용 DB라 로컬 서버가 남의 단원을 건드리지 않게 기본은 끈다.
+  # 로컬에서 시험할 때만 .env에 QUESTION_PREGEN_RETRY_ENABLED=true
+  pregen-retry-enabled: ${QUESTION_PREGEN_RETRY_ENABLED:false}
+  pregen-retry-check-interval: 5m
+  pregen-retry-delay: 10m
+  pregen-retry-max: 1
   pregen-ratio:
     ox: 14
     mc: 13
