@@ -294,6 +294,18 @@ class SessionServiceTest {
 	}
 
 	@Test
+	void 단원_필터가_있는_오답_세션은_현재_categoryIds를_저장한다() {
+		// Characterize the existing contract: progress identifies wrong-note sessions by NULL category_ids.
+		// Filtered wrongNotes currently stores IDs, so its automatic RESOLVED transition needs follow-up.
+		sessions.addWrong(7, "OX", true);
+		CreateSessionResponse response = service.create(JWT,
+				new CreateSessionRequest(SessionSource.WRONG_NOTES, List.of(7L), List.of("OX"), 2, null, null));
+		assertEquals(1, response.questionCount());
+		assertEquals(List.of(7L), sessions.savedCategoryIds);
+		assertEquals(0, generation.calls.size());
+	}
+
+	@Test
 	void 단답은_정답을_내려주지_않는다() {
 		sessions.addUnsolved(7, "SHORT", 20);
 
