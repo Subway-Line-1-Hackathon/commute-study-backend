@@ -132,4 +132,51 @@ class TutorAiClientImplTest {
 				"그럼 큐는 어디에 써요?"
 		);
 	}
+
+    @Test void malformedEventAndEofWithoutDoneAreFailures() throws IOException {
+        server=startSseServer(200,"event: delta\ndata: broken\n\n");
+        assertThrows(ApiException.class,()->client(server.getAddress().getPort()).ask(sampleRequest(),new RecordingListener()));
+        server.stop(0);
+        server=startSseServer(200,"event: delta\ndata: {\"text\":\"partial\"}\n\n");
+        var listener=new RecordingListener();
+        assertThrows(ApiException.class,()->client(server.getAddress().getPort()).ask(sampleRequest(),listener));
+        assertEquals(List.of("partial"),listener.deltas()); assertTrue(listener.dones().isEmpty());
+    }
+
+    @Test void listenerFailureIsNotSwallowed() throws IOException {
+        server=startSseServer(200,"event: delta\ndata: {\"text\":\"partial\"}\n\n");
+        var listener=new TutorEventListener() {
+            public void onDelta(String text) { throw new IllegalStateException("downstream"); }
+            public void onDone(AiMeta meta) {}
+            public void onError(String code,String message) {}
+        };
+        assertThrows(IllegalStateException.class,()->client(server.getAddress().getPort()).ask(sampleRequest(),listener));
+    }
+
+    @Test void multiLineDataAndTerminalWithoutFinalBlankLineAreParsedOnce() throws IOException {
+        server=startSseServer(200,": heartbeat\n\nevent: done\ndata: {\"meta\":\ndata: {\"model\":\"mock\",\"inputTokens\":0,\"outputTokens\":0,\"elapsedMs\":0,\"attempts\":1}}");
+        var listener=new RecordingListener(); client(server.getAddress().getPort()).ask(sampleRequest(),listener);
+        assertEquals(1,listener.dones().size());
+    }
+
+    @Test void stalledBodyIsBoundedByTotalDeadline() throws IOException {
+        server=HttpServer.create(new InetSocketAddress("localhost",0),0);
+        var release=new java.util.concurrent.CountDownLatch(1);
+        server.createContext("/",exchange->{
+            exchange.sendResponseHeaders(200,0);
+            try(var out=exchange.getResponseBody()) {
+                out.write("event: delta\ndata: {\"text\":\"partial\"}\n\n".getBytes(StandardCharsets.UTF_8)); out.flush();
+                try { release.await(5,java.util.concurrent.TimeUnit.SECONDS); } catch(InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+        }); server.start();
+        var props=new AiProperties(); props.setServerUrl("http://localhost:"+server.getAddress().getPort()); props.setInternalKey("test"); props.getTimeout().put("ai05",1);
+        var listener=new RecordingListener(); var client=new TutorAiClientImpl(props);
+        try {
+            long start=System.nanoTime();
+            var error=assertThrows(ApiException.class,()->client.ask(sampleRequest(),listener));
+            assertEquals(AiErrorCode.AI_TIMEOUT,error.getErrorCode());
+            assertTrue(java.time.Duration.ofNanos(System.nanoTime()-start).toSeconds()<4);
+            assertEquals(List.of("partial"),listener.deltas());
+        } finally { release.countDown(); client.close(); }
+    }
 }

@@ -4,9 +4,9 @@ Spring Boot 4.1.2 + PostgreSQL(Supabase) 기반 API 서버. Railway 로 배포�
 
 ## 문서
 
-| 문서 | 내용 |
-|---|---|
-| [백엔드 개발 명세서](docs/백엔드_개발_명세서.md) | 범위, 시스템 구성, 인증, 설정값, 데이터 모델, API, 핵심 로직, 개발 순서, 완료 체크리스트 |
+| 문서                                                         | 내용                                                                                           |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| [백엔드 개발 명세서](docs/백엔드_개발_명세서.md)             | 범위, 시스템 구성, 인증, 설정값, 데이터 모델, API, 핵심 로직, 개발 순서, 완료 체크리스트       |
 | [AI 서버 ↔ 백엔드 API 명세](docs/AI_서버_백엔드_API_명세.md) | 백엔드가 AI 서버(FastAPI)를 호출하는 API의 요청·응답, 에러, 타임아웃, AI 담당과 합의 필요 항목 |
 
 슬라이스 5의 신규 API, CurrentUser 재사용 방법과 검증 범위는
@@ -53,19 +53,19 @@ Railway 프로젝트의 **Variables** 탭에 아래 환경변수를 등록한다
 
 여기서는 실제 OS 환경변수로 주입되므로, 로컬 `.env`와 달리 **대문자 + 언더스코어 표기**를 그대로 쓴다.
 
-| 변수명 | 설명 |
-|---|---|
-| `SPRING_DATASOURCE_URL` | Supabase JDBC URL (6543, Transaction pooling) |
-| `SPRING_DATASOURCE_USERNAME` | Supabase DB 사용자명 |
-| `SPRING_DATASOURCE_PASSWORD` | Supabase DB 비밀번호 |
-| `SPRING_FLYWAY_URL` | Supabase JDBC URL (5432, Session/Direct) |
-| `SPRING_FLYWAY_USER` | Supabase DB 사용자명 (datasource와 동일) |
-| `SPRING_FLYWAY_PASSWORD` | Supabase DB 비밀번호 (datasource와 동일) |
-| `SUPABASE_URL` | 구글 로그인 JWT 검증용 Supabase Project URL. **빠지면 기동 자체가 실패한다** |
-| `AI_SERVER_URL` | AI 서버 주소 (같은 Railway 프로젝트 내부망, 포트 포함) |
-| `AI_INTERNAL_KEY` | AI 서버의 같은 이름 변수와 같은 값. 로그에 남기지 않는다 |
-| `SPRING_PROFILES_ACTIVE` | `prod` — 운영에서 `show-sql`을 끄는 프로파일(`application-prod.yaml`) 적용 |
-| `APP_CORS_ALLOWED_ORIGINS` | 허용할 프론트 출처의 쉼표 목록 (예: `https://frontend.example.com,https://preview.example.com`) |
+| 변수명                       | 설명                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `SPRING_DATASOURCE_URL`      | Supabase JDBC URL (6543, Transaction pooling)                                                   |
+| `SPRING_DATASOURCE_USERNAME` | Supabase DB 사용자명                                                                            |
+| `SPRING_DATASOURCE_PASSWORD` | Supabase DB 비밀번호                                                                            |
+| `SPRING_FLYWAY_URL`          | Supabase JDBC URL (5432, Session/Direct)                                                        |
+| `SPRING_FLYWAY_USER`         | Supabase DB 사용자명 (datasource와 동일)                                                        |
+| `SPRING_FLYWAY_PASSWORD`     | Supabase DB 비밀번호 (datasource와 동일)                                                        |
+| `SUPABASE_URL`               | 구글 로그인 JWT 검증용 Supabase Project URL. **빠지면 기동 자체가 실패한다**                    |
+| `AI_SERVER_URL`              | AI 서버 주소 (같은 Railway 프로젝트 내부망, 포트 포함)                                          |
+| `AI_INTERNAL_KEY`            | AI 서버의 같은 이름 변수와 같은 값. 로그에 남기지 않는다                                        |
+| `SPRING_PROFILES_ACTIVE`     | `prod` — 운영에서 `show-sql`을 끄는 프로파일(`application-prod.yaml`) 적용                      |
+| `APP_CORS_ALLOWED_ORIGINS`   | 허용할 프론트 출처의 쉼표 목록 (예: `https://frontend.example.com,https://preview.example.com`) |
 
 CORS는 `/api/**`에 적용되며 GET, POST, PUT, PATCH, DELETE, OPTIONS를 허용한다.
 `app.cors.allowed-origins`의 기본값은 `http://127.0.0.1:5500`, `http://127.0.0.1:5501`,
@@ -190,6 +190,7 @@ forwarded 헤더는 신뢰하는 프록시가 외부 입력을 정리해 전달�
 ## DB 스키마 운영
 
 세션 요약과 KST 정답률 그래프 조회는 [슬라이스 17 안내](docs/슬라이스17_학습_리포트.md)를 참고한다.
+AI 질문 SSE와 하루 20회 제한, fetch/curl 검증은 [슬라이스 16 안내](docs/슬라이스16_AI_질문.md)를 참고한다.
 
 단원별 진도·정답률 및 문제 해설 조회 API는 [슬라이스 11 안내](docs/슬라이스11_학습_조회.md)를 참고한다.
 
