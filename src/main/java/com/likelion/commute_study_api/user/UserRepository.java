@@ -35,6 +35,17 @@ public class UserRepository {
                 rs.getString("to_station"), rs.getBoolean("has_subject")), userId);
     }
 
+    public String findNickname(UUID userId) {
+        return jdbcTemplate.query("SELECT nickname FROM public.app_user WHERE id = ?",
+                rs -> rs.next() ? rs.getString("nickname") : null, userId);
+    }
+
+    /** Called in the service transaction: atomic create-if-missing plus nickname-only update. */
+    public void saveNickname(UUID userId, String nickname) {
+        createIfAbsent(userId);
+        jdbcTemplate.update("UPDATE public.app_user SET nickname = ? WHERE id = ?", nickname, userId);
+    }
+
     public record UserSnapshot(UUID userId, String nickname, Integer oneWayMin,
                                String fromStation, String toStation, boolean hasSubject) {
     }

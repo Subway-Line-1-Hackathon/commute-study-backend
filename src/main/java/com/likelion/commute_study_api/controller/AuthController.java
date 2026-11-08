@@ -1,56 +1,28 @@
-
 package com.likelion.commute_study_api.controller;
 
+import com.likelion.commute_study_api.user.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.*;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
-
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api/auth")
+@ApiResponse(responseCode="401",description="인증 실패",content=@Content(mediaType="application/json",examples=@ExampleObject(value="{\"code\":\"UNAUTHORIZED\",\"message\":\"인증에 실패했습니다.\",\"details\":null}")))
 public class AuthController {
-
-    private final JdbcTemplate jdbcTemplate;
-
-    public AuthController(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    private final UserService service;
+    public AuthController(UserService service) {
+        this.service = service;
     }
 
-    @Operation(deprecated = true, description = "GET /api/users/me로 전환해주세요.")
+    @Operation(deprecated = true, description = "GET /api/users/me로 전환해주세요. 기존 성공 응답은 유지하며 이 조회는 사용자를 생성하지 않습니다.")
+    @ApiResponse(responseCode = "200", description = "로그인 상태 조회 성공")
     @GetMapping("/me")
-    public Map<String, Object> me(@AuthenticationPrincipal Jwt jwt) {
-
-        UUID userId = UUID.fromString(jwt.getSubject());
-
-        String nickname = jdbcTemplate.query("""
-                SELECT nickname
-                FROM public.app_user
-                WHERE id = ?
-                """,
-                rs -> rs.next() ? rs.getString("nickname") : null,
-                userId
-        );
-
-        boolean nicknameSet =
-                nickname != null && !nickname.isBlank();
-
-        Map<String, Object> response = new LinkedHashMap<>();
-
-        response.put("userId", userId.toString());
-        response.put("email", jwt.getClaimAsString("email"));
-        response.put("nickname", nickname);
-        response.put("nicknameSet", nicknameSet);
-
-        return response;
+    public UserService.LegacyAuth me(@AuthenticationPrincipal Jwt jwt) {
+        return service.legacyAuth(jwt);
     }
 }
