@@ -26,6 +26,8 @@ public class AiAsyncConfig {
 		executor.setMaxPoolSize(aiProperties.getMaxConcurrency());
 		executor.setQueueCapacity(100);
 		executor.setThreadNamePrefix("ai-exec-");
+		// 개발용 X-Mock-Error를 업로드 요청 → 단원화·사전 생성 작업으로 넘긴다(설정이 꺼져 있으면 AI 서버로는 안 보냄)
+		executor.setTaskDecorator(MockErrorContext.taskDecorator());
 		executor.initialize();
 		return executor;
 	}

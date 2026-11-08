@@ -2,7 +2,6 @@ package com.likelion.commute_study_api.ai.support;
 
 import java.net.SocketTimeoutException;
 import java.time.Duration;
-import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +11,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.likelion.commute_study_api.ai.AiCallException;
 import com.likelion.commute_study_api.ai.AiErrorCode;
@@ -32,8 +29,7 @@ public class AiHttpSupport {
 	private static final Logger log = LoggerFactory.getLogger(AiHttpSupport.class);
 
 	/** AI 서버 mock이 실패를 흉내 내는 헤더(AI 서버 ↔ 백엔드 API 명세 1장). */
-	public static final String MOCK_ERROR_HEADER = "X-Mock-Error";
-	private static final Pattern MOCK_ERROR_VALUE = Pattern.compile("[A-Z_]{1,40}");
+	public static final String MOCK_ERROR_HEADER = MockErrorContext.HEADER;
 
 	private final AiProperties aiProperties;
 
@@ -50,7 +46,7 @@ public class AiHttpSupport {
 		long start = System.currentTimeMillis();
 		try {
 			RestClient.RequestBodySpec request = client.post().uri(path);
-			String mockError = mockErrorToForward();
+			String mockError = mockErrorToForward(featureId);
 			if (mockError != null) {
 				request = request.header(MOCK_ERROR_HEADER, mockError);
 				log.warn("[{}] 개발용 X-Mock-Error 전달 code={}", featureId, mockError);
@@ -75,22 +71,15 @@ public class AiHttpSupport {
 	}
 
 	/**
-	 * ai.mock-error-passthrough가 켜져 있고 지금 처리 중인 사용자 요청에 X-Mock-Error가 있으면 그 값을 돌려준다.
-	 * 요청 스레드 밖(aiExecutor 비동기 호출, 스케줄러)에서는 요청이 없으므로 넘기지 않는다.
-	 * 값은 AI 에러 코드 형식(대문자·밑줄)만 받아 다른 헤더 값이 섞여 들어가지 않게 한다.
+	 * ai.mock-error-passthrough가 켜져 있으면, 이 호출을 일으킨 사용자 요청의 X-Mock-Error 값(에러 코드)을 돌려준다.
+	 * 비동기 호출도 작업을 맡긴 요청의 값을 넘겨받는다({@link MockErrorContext}). 스케줄러 호출에는 없다.
+	 * {@code AI-02:LLM_FAILED}처럼 기능을 지정했으면 그 기능의 호출에만 붙는다.
 	 */
-	String mockErrorToForward() {
+	String mockErrorToForward(String featureId) {
 		if (!aiProperties.isMockErrorPassthrough()) {
 			return null;
 		}
-		if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
-			return null;
-		}
-		String value = attributes.getRequest().getHeader(MOCK_ERROR_HEADER);
-		if (value == null || !MOCK_ERROR_VALUE.matcher(value).matches()) {
-			return null;
-		}
-		return value;
+		return MockErrorContext.codeFor(featureId);
 	}
 
 	private boolean containsSocketTimeout(Throwable e) {
