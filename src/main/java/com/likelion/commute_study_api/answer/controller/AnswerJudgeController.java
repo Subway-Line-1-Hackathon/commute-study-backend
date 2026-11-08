@@ -7,17 +7,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.likelion.commute_study_api.ai.support.AiHttpSupport;
 import com.likelion.commute_study_api.answer.dto.JudgeAnswerRequest;
 import com.likelion.commute_study_api.answer.dto.JudgeAnswerResponse;
 import com.likelion.commute_study_api.answer.service.AnswerJudgeService;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -63,13 +59,7 @@ public class AnswerJudgeController {
 	@ApiResponse(responseCode = "400", description = "VALIDATION_ERROR: 필수값 없음, 답 30자 초과, 단답이 아닌 문제",
 			content = @Content)
 	@ApiResponse(responseCode = "404", description = "NOT_FOUND: 없거나 다른 사용자의 문제", content = @Content)
-	@Parameter(in = ParameterIn.HEADER, name = AiHttpSupport.MOCK_ERROR_HEADER, required = false,
-			description = """
-					개발·데모용. 평소에는 비워 둔다. 서버 설정 `AI_MOCK_ERROR_PASSTHROUGH=true`이고 AI 서버가 mock일 때만 동작한다.
-					`LLM_TIMEOUT`·`LLM_FAILED`를 넣으면 AI 실패 경로(`{correct: null, timeout: true}`)를 시험할 수 있다.
-					정답 목록과 일치하는 답은 AI를 부르지 않으므로 다른 답을 넣는다""",
-			// example을 두면 Swagger UI가 Try it out에서 값을 미리 채워 보내므로 두지 않는다.
-			schema = @Schema(type = "string"))
+	// 개발용 X-Mock-Error 입력칸은 설정이 켜진 서버에서만 MockErrorOpenApiCustomizer가 붙인다
 	@PostMapping("/judge")
 	public JudgeAnswerResponse judge(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody JudgeAnswerRequest request) {
 		return answerJudgeService.judge(jwt, request);
