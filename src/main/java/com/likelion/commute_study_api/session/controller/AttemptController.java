@@ -19,7 +19,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
-@Tag(name = "답안", description = "문제 풀이 응답 저장")
+@Tag(name = "답안", description = "답안 저장과 단답형 판정")
 @RestController
 @RequestMapping("/api/attempts")
 @SecurityRequirement(name = "bearerAuth")

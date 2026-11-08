@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.*;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import jakarta.validation.Valid;
@@ -20,6 +21,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
+@Tag(name="AI 질문",description="문제에 대한 AI 질문(SSE)과 하루 남은 횟수")
 @RestController
 @SecurityRequirement(name="bearerAuth")
 public class TutorController {
