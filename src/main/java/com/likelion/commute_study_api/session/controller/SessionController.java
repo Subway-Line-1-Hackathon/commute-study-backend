@@ -131,6 +131,11 @@ public class SessionController {
 			진행 중 세션을 `ENDED`로 바꾼다. `reason`: `QUIT`(그만하기), `ARRIVED`(도착), `NEW_START`(이어하기 팝업에서 새로 시작).
 			마지막 문제까지 풀면 답안 저장에서 자동으로 `COMPLETED`가 되므로 이 API를 부르지 않아도 된다.
 			이미 끝난 세션이면 그 상태(`COMPLETED`/`ENDED`)를 그대로 준다(다시 보내도 안전).
+
+			**통학 후 AI 피드백**: 종료가 저장된 뒤 서버가 따로 만들어 저장한다(보통 수 초, 최대 약 15초). 이 응답은 기다리지 않는다.
+			- 리포트(`GET /api/subjects/{id}/report?scope=session`)의 `feedback`으로 읽는다. 아직 없거나 AI가 실패하면 `null`이니 숫자 카드만 보여준다
+			- `NEW_START`로 끝났거나 채점된 응답이 0개면 만들지 않는다. 세션당 한 번만 만든다
+			- 종료 전에 기기에 쌓인 응답을 먼저 `POST /api/attempts`로 보내야 피드백에 반영된다
 			""")
 	@io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(
 			mediaType = "application/json", examples = @ExampleObject(value = """
