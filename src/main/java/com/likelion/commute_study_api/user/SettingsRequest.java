@@ -16,14 +16,13 @@ public record SettingsRequest(
         @Size(max = 50) String toStation) {
 
     public SettingsRequest {
-        nickname = nickname == null ? null : nickname.trim();
+        nickname = NicknamePolicy.normalize(nickname);
     }
 
     @JsonIgnore
     @AssertTrue(message = "닉네임은 2~10자로 입력해주세요.")
     public boolean isNicknameValid() {
         if (nickname == null) return true; // @NotNull handles missing values.
-        int length = nickname.codePointCount(0, nickname.length());
-        return length >= 2 && length <= 10;
+        return NicknamePolicy.valid(nickname);
     }
 }

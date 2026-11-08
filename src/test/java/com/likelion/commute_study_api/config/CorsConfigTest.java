@@ -1,13 +1,14 @@
 package com.likelion.commute_study_api.config;
 
 import com.likelion.commute_study_api.controller.NicknameController;
+import com.likelion.commute_study_api.user.NicknameRequest;
+import com.likelion.commute_study_api.user.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -15,9 +16,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -33,7 +35,7 @@ class CorsConfigTest {
     MockMvc mvc;
 
     @MockitoBean
-    JdbcTemplate jdbcTemplate;
+    UserService userService;
 
     @MockitoBean
     JwtDecoder jwtDecoder;
@@ -83,6 +85,8 @@ class CorsConfigTest {
 
     @Test
     void nicknameReadStillWorksWithCors() throws Exception {
+        when(userService.legacyNickname(any())).thenReturn(
+                new UserService.LegacyNickname(UUID.fromString(USER_ID), null, false));
         mvc.perform(get(PATH).header("Origin", ORIGIN).with(jwt().jwt(jwt -> jwt.subject(USER_ID))))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", ORIGIN))
@@ -92,11 +96,13 @@ class CorsConfigTest {
 
     @Test
     void nicknameUpdateStillWorksWithCors() throws Exception {
+        when(userService.saveNickname(any(), eq(new NicknameRequest("테스터")))).thenReturn(
+                new UserService.SavedNickname(UUID.fromString(USER_ID), "테스터", "닉네임 저장 성공"));
         mvc.perform(put(PATH).header("Origin", ORIGIN).with(jwt().jwt(jwt -> jwt.subject(USER_ID)))
                         .contentType("application/json").content("{\"nickname\":\"테스터\"}"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", ORIGIN))
                 .andExpect(jsonPath("$.nickname").value("테스터"));
-        verify(jdbcTemplate).update(anyString(), eq(UUID.fromString(USER_ID)), eq("테스터"));
+        verify(userService).saveNickname(any(), eq(new NicknameRequest("테스터")));
     }
 }

@@ -5,7 +5,7 @@ import tools.jackson.databind.DeserializationContext;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ValueDeserializer;
 
-/** Keep strict JSON types local to this API; do not change legacy API coercion. */
+/** Keep strict JSON types local to this API without changing global coercion settings. */
 public class SettingsRequestDeserializer extends ValueDeserializer<SettingsRequest> {
     @Override
     public SettingsRequest deserialize(JsonParser parser, DeserializationContext context) {

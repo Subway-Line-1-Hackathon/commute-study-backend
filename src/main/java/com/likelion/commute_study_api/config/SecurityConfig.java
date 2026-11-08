@@ -15,7 +15,12 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http)
+    public JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint() {
+        return new JsonAuthenticationEntryPoint();
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JsonAuthenticationEntryPoint entryPoint)
             throws Exception {
 
         http
@@ -40,9 +45,11 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
 
-            // Supabase JWT 검증
+            .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint))
+
+            // Supabase JWT 검증: 검증 정책은 유지하고 실패 응답만 통일한다.
             .oauth2ResourceServer(oauth2 ->
-                oauth2.jwt(Customizer.withDefaults())
+                oauth2.jwt(Customizer.withDefaults()).authenticationEntryPoint(entryPoint)
             );
 
         return http.build();

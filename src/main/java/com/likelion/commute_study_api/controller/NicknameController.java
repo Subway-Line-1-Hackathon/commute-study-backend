@@ -1,107 +1,40 @@
-
 package com.likelion.commute_study_api.controller;
 
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
+import com.likelion.commute_study_api.user.NicknameRequest;
+import com.likelion.commute_study_api.user.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.*;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
-
-import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api/users/me")
+@ApiResponse(responseCode="401",description="인증 실패",content=@Content(mediaType="application/json",examples=@ExampleObject(value="{\"code\":\"UNAUTHORIZED\",\"message\":\"인증에 실패했습니다.\",\"details\":null}")))
 public class NicknameController {
-
-    private final JdbcTemplate jdbcTemplate;
-
-    public NicknameController(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    private final UserService service;
+    public NicknameController(UserService service) {
+        this.service = service;
     }
 
-    // 닉네임 설정 및 수정
-    @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            required = true,
-            content = @Content(
-                    mediaType = "application/json",
-                    examples = @ExampleObject(
-                            value = "{\"nickname\":\"동현\"}"
-                    )
-            )
-    )
-    @io.swagger.v3.oas.annotations.Operation(deprecated = true, description = "PUT /api/users/me/settings로 전환해주세요.")
+    @Operation(deprecated=true,description="PUT /api/users/me/settings로 전환해주세요. 이 경로는 통학 설정 없이 닉네임만 저장합니다.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required=true,content=@Content(mediaType="application/json",examples=@ExampleObject(value="{\"nickname\":\"동현\"}")))
+    @ApiResponse(responseCode="400",description="VALIDATION_ERROR: 닉네임 또는 JSON 형식 오류",content=@Content(mediaType="application/json",examples={
+            @ExampleObject(name="nickname",value="{\"code\":\"VALIDATION_ERROR\",\"message\":\"닉네임은 2~10자로 입력해주세요.\",\"details\":null}"),
+            @ExampleObject(name="json",value="{\"code\":\"VALIDATION_ERROR\",\"message\":\"입력 형식 또는 범위가 올바르지 않습니다.\",\"details\":null}")}))
     @PutMapping("/nickname")
-    public ResponseEntity<?> updateNickname(
-            @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, String> request) {
-
-        // JWT에서 인증된 사용자의 고유 UUID 추출
-        UUID userId = UUID.fromString(jwt.getSubject());
-
-        String nickname = request.get("nickname");
-
-        if (nickname == null) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "닉네임을 입력해주세요."));
-        }
-
-        nickname = nickname.trim();
-
-        int length = nickname.codePointCount(0, nickname.length());
-
-        if (length < 2 || length > 10) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "닉네임은 2~10자로 입력해주세요."));
-        }
-
-        // UUID를 기준으로 사용자 생성 또는 닉네임 수정
-        jdbcTemplate.update("""
-            INSERT INTO public.app_user (id, nickname)
-            VALUES (?, ?)
-            ON CONFLICT (id)
-            DO UPDATE SET nickname = EXCLUDED.nickname
-            """, userId, nickname);
-
-        return ResponseEntity.ok(Map.of(
-                "userId", userId.toString(),
-                "nickname", nickname,
-                "message", "닉네임 저장 성공"
-        ));
+    @ApiResponse(responseCode = "200", description = "닉네임 저장 성공")
+    public UserService.SavedNickname updateNickname(@AuthenticationPrincipal Jwt jwt, @RequestBody NicknameRequest request) {
+        return service.saveNickname(jwt, request);
     }
 
-    // 현재 로그인한 사용자의 닉네임 조회
-    @io.swagger.v3.oas.annotations.Operation(deprecated = true, description = "GET /api/users/me/settings로 전환해주세요.")
+    @Operation(deprecated=true,description="GET /api/users/me/settings로 전환해주세요. 기존 성공 응답은 유지합니다.")
     @GetMapping("/nickname")
-    public ResponseEntity<?> getNickname(
-            @AuthenticationPrincipal Jwt jwt) {
-
-        UUID userId = UUID.fromString(jwt.getSubject());
-
-        String nickname = jdbcTemplate.query("""
-            SELECT nickname
-            FROM public.app_user
-            WHERE id = ?
-            """,
-            rs -> rs.next() ? rs.getString("nickname") : null,
-            userId
-        );
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("userId", userId.toString());
-        response.put("nickname", nickname);
-        response.put("nicknameSet", nickname != null && !nickname.isBlank());
-
-        return ResponseEntity.ok(response);
+    @ApiResponse(responseCode = "200", description = "닉네임 조회 성공")
+    public UserService.LegacyNickname getNickname(@AuthenticationPrincipal Jwt jwt) {
+        return service.legacyNickname(jwt);
     }
 }
