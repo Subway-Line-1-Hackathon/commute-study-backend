@@ -114,7 +114,7 @@ public class SessionRepository {
 		return jdbcTemplate.query("""
 				with open_notes as (
 				    select wn.question_id, wn.last_wrong_at,
-				           row_number() over (partition by c.subject_id order by wn.last_wrong_at desc) <= ? as listed
+				           row_number() over (partition by c.subject_id order by wn.last_wrong_at desc, wn.question_id desc) <= ? as listed
 				    from public.wrong_note wn
 				    join public.question q on q.id = wn.question_id
 				    join public.category c on c.id = q.category_id
