@@ -39,7 +39,7 @@ public class AttemptController {
 			- O/X·객관식은 서버가 다시 채점하므로 `correct`를 보내지 않아도 된다
 			- 단답은 판정 API 결과나 자가 판정을 `correct`에 넣는다. 자가 판정이면 `selfJudged: true`, 판정 전이면 `correct`를 비운다
 			- 틀린 문제는 오답노트에 쌓이고, 오답노트 다시 풀기 세션에서 맞히면 해결 처리된다
-			- 세션의 모든 문제에 응답하면 `sessionStatus`가 `COMPLETED`가 된다
+			- 세션의 모든 문제에 응답하면 `sessionStatus`가 `COMPLETED`가 된다. 이때 통학 후 AI 피드백을 서버가 따로 만든다(세션 종료 API 설명 참고)
 			- 이미 끝난(ENDED) 세션에 늦게 도착한 응답도 저장한다
 			""")
 	@io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(
