@@ -227,6 +227,21 @@ class TutorIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count FROM ai_question_usage WHERE user_id=? AND date=?",Integer.class,USER,LocalDate.of(2026,11,8))).isEqualTo(19);
     }
 
+    @Test void mockErrorHeaderReachesQuestionThread() throws Exception {
+        // #36: 요청의 X-Mock-Error가 질문을 보내는 tutor 스레드에서도 보여야 AI-05 실패 경로를 시험할 수 있다
+        var seen=new AtomicReference<String>("(not called)");
+        doAnswer(inv->{ seen.set(com.likelion.commute_study_api.ai.support.MockErrorContext.codeFor("AI-05"));
+            ((TutorEventListener)inv.getArgument(1)).onDone(META); return null; }).when(ai).ask(any(),any());
+        var request=new org.springframework.mock.web.MockHttpServletRequest(); request.addHeader("X-Mock-Error","AI-05:LLM_FAILED");
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                new org.springframework.web.context.request.ServletRequestAttributes(request));
+        try {
+            var output=new RecordingOutput("none"); service.prepare(question,USER,input()).start(output);
+            assertThat(output.complete.await(5,TimeUnit.SECONDS)).isTrue();
+        } finally { org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes(); }
+        assertThat(seen.get()).isEqualTo("LLM_FAILED");
+    }
+
     @Test void rejectedWorkerReleasesOccupancyWithoutCharge() throws Exception {
         var executor=Executors.newVirtualThreadPerTaskExecutor(); executor.close();
         var isolated=new TutorStreamService(context,quota,ai,executor);
