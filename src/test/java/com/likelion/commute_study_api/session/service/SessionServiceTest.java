@@ -92,6 +92,7 @@ class SessionServiceTest {
 		assertNull(r.shortage());
 		assertEquals(0, generation.calls.size());
 		assertEquals(27, sessions.savedQuestionIds.size());
+		assertEquals(SessionSource.CATEGORIES, sessions.savedSource);
 		assertEquals(1, sessions.deleteReadyCalls);
 	}
 
@@ -285,6 +286,7 @@ class SessionServiceTest {
 		assertNull(r.summary());
 		assertEquals(0, generation.calls.size());
 		assertNull(sessions.savedCategoryIds);
+		assertEquals(SessionSource.WRONG_NOTES, sessions.savedSource);
 	}
 
 	@Test
@@ -295,13 +297,12 @@ class SessionServiceTest {
 
 	@Test
 	void 단원_필터가_있는_오답_세션은_현재_categoryIds를_저장한다() {
-		// Characterize the existing contract: progress identifies wrong-note sessions by NULL category_ids.
-		// Filtered wrongNotes currently stores IDs, so its automatic RESOLVED transition needs follow-up.
 		sessions.addWrong(7, "OX", true);
 		CreateSessionResponse response = service.create(JWT,
 				new CreateSessionRequest(SessionSource.WRONG_NOTES, List.of(7L), List.of("OX"), 2, null, null));
 		assertEquals(1, response.questionCount());
 		assertEquals(List.of(7L), sessions.savedCategoryIds);
+		assertEquals(SessionSource.WRONG_NOTES, sessions.savedSource);
 		assertEquals(0, generation.calls.size());
 	}
 
@@ -341,6 +342,7 @@ class SessionServiceTest {
 		final List<CandidateQuestion> candidates = new CopyOnWriteArrayList<>();
 		List<Long> savedQuestionIds = new ArrayList<>();
 		List<Long> savedCategoryIds = List.of(-1L);
+		SessionSource savedSource;
 		int deleteReadyCalls = 0;
 		private long nextId = 1;
 
@@ -394,7 +396,8 @@ class SessionServiceTest {
 
 		@Override
 		public long insertSession(UUID userId, List<Long> categoryIds, List<String> questionTypes, int difficulty,
-				int studyMin, String mode) {
+				int studyMin, String mode, SessionSource source) {
+			savedSource = source;
 			savedCategoryIds = categoryIds.isEmpty() ? null : categoryIds;
 			return 100L;
 		}

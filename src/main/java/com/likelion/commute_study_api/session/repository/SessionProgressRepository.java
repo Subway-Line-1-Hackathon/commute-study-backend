@@ -21,7 +21,7 @@ import com.likelion.commute_study_api.session.SessionStatus;
 public class SessionProgressRepository {
 
 	private static final String SESSION_COLUMNS = """
-			s.id, s.user_id, s.status::text as status, s.category_ids is null as wrong_notes,
+			s.id, s.user_id, s.status::text as status, s.source = 'wrongNotes' as wrong_notes,
 			s.started_at, s.ended_at
 			""";
 
@@ -40,7 +40,7 @@ public class SessionProgressRepository {
 	}
 
 	/**
-	 * @param wrongNotes 오답노트 다시 풀기로 만든 세션인지(category_ids가 null). 정답이면 오답을 RESOLVED로 바꾸는 기준
+	 * @param wrongNotes 오답노트 다시 풀기로 만든 세션인지(source가 wrongNotes). 정답이면 오답을 RESOLVED로 바꾸는 기준
 	 */
 	public record SessionRow(long id, UUID userId, SessionStatus status, boolean wrongNotes, Instant startedAt,
 			Instant endedAt) {
@@ -100,7 +100,7 @@ public class SessionProgressRepository {
 
 	/**
 	 * 세션 문제들이 속한 단원 이름을 세션 문제 순서대로(중복 없이) 돌려준다.
-	 * 오답노트 다시 풀기 세션은 category_ids가 null이라 session_question에서 구한다.
+	 * 선택된 문제에 해당하는 단원을 session_question에서 구한다.
 	 */
 	public List<String> findCategoryNames(long sessionId) {
 		return jdbcTemplate.queryForList("""

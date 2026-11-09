@@ -14,6 +14,7 @@ import org.springframework.stereotype.Repository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.likelion.commute_study_api.session.dto.SessionSource;
 
 /**
  * 세션 생성(슬라이스 12)에 필요한 SQL.
@@ -167,16 +168,16 @@ public class SessionRepository {
 				""", userId);
 	}
 
-	/** status는 기본값 READY. categoryIds가 비어 있으면 null로 저장한다(오답노트 다시 풀기). */
+	/** status는 기본값 READY. 선택한 단원과 세션 출처를 각각 저장한다. */
 	public long insertSession(UUID userId, List<Long> categoryIds, List<String> questionTypes, int difficulty,
-			int studyMin, String mode) {
+			int studyMin, String mode, SessionSource source) {
 		String categoryArray = categoryIds.isEmpty() ? null
 				: categoryIds.stream().map(String::valueOf).collect(Collectors.joining(",", "{", "}"));
 		Long id = jdbcTemplate.queryForObject("""
-				insert into public.session (user_id, category_ids, question_types, difficulty, study_min, mode)
-				values (?, ?::bigint[], ?::jsonb, ?, ?, ?::session_mode)
+				insert into public.session (user_id, category_ids, question_types, difficulty, study_min, mode, source)
+				values (?, ?::bigint[], ?::jsonb, ?, ?, ?::session_mode, ?)
 				returning id
-				""", Long.class, userId, categoryArray, toJson(questionTypes), difficulty, studyMin, mode);
+				""", Long.class, userId, categoryArray, toJson(questionTypes), difficulty, studyMin, mode, source.value());
 		if (id == null) {
 			throw new IllegalStateException("세션 id를 받지 못함");
 		}
