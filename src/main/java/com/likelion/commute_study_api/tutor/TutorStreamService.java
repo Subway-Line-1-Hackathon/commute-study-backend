@@ -51,7 +51,8 @@ public class TutorStreamService {
                 catch(Exception e) { fail(e instanceof ApiException a?a:new ApiException(AiErrorCode.AI_UNAVAILABLE)); }
                 return null;
             });
-            try { executor.execute(task); }
+            // 개발용 X-Mock-Error를 질문 스레드로 넘긴다(task.cancel은 FutureTask를 직접 취소하므로 그대로 동작)
+            try { executor.execute(MockErrorContext.wrap(task)); }
             catch(RuntimeException e) { fail(new ApiException(AiErrorCode.AI_UNAVAILABLE)); }
         }
         public synchronized void onDelta(String text) {

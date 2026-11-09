@@ -6,10 +6,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.*;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "사용자", description = "내 정보, 닉네임·통학 설정")
 @SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api/users/me")
@@ -20,7 +22,7 @@ public class NicknameController {
         this.service = service;
     }
 
-    @Operation(deprecated=true,description="PUT /api/users/me/settings로 전환해주세요. 이 경로는 통학 설정 없이 닉네임만 저장합니다.")
+    @Operation(summary="닉네임 저장(구버전)",deprecated=true,description="PUT /api/users/me/settings로 전환해주세요. 이 경로는 통학 설정 없이 닉네임만 저장합니다.")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(required=true,content=@Content(mediaType="application/json",examples=@ExampleObject(value="{\"nickname\":\"동현\"}")))
     @ApiResponse(responseCode="400",description="VALIDATION_ERROR: 닉네임 또는 JSON 형식 오류",content=@Content(mediaType="application/json",examples={
             @ExampleObject(name="nickname",value="{\"code\":\"VALIDATION_ERROR\",\"message\":\"닉네임은 2~10자로 입력해주세요.\",\"details\":null}"),
@@ -31,7 +33,7 @@ public class NicknameController {
         return service.saveNickname(jwt, request);
     }
 
-    @Operation(deprecated=true,description="GET /api/users/me/settings로 전환해주세요. 기존 성공 응답은 유지합니다.")
+    @Operation(summary="닉네임 조회(구버전)",deprecated=true,description="GET /api/users/me/settings로 전환해주세요. 기존 성공 응답은 유지합니다.")
     @GetMapping("/nickname")
     @ApiResponse(responseCode = "200", description = "닉네임 조회 성공")
     public UserService.LegacyNickname getNickname(@AuthenticationPrincipal Jwt jwt) {

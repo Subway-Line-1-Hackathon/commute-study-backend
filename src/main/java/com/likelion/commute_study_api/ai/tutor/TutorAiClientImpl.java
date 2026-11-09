@@ -9,12 +9,16 @@ import java.util.concurrent.atomic.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.likelion.commute_study_api.ai.AiErrorCode;
 import com.likelion.commute_study_api.ai.support.AiErrorBody;
+import com.likelion.commute_study_api.ai.support.MockErrorContext;
 import com.likelion.commute_study_api.common.config.AiProperties;
 import com.likelion.commute_study_api.common.exception.ApiException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class TutorAiClientImpl implements TutorAiClient {
+    private static final Logger log=LoggerFactory.getLogger(TutorAiClientImpl.class);
     private final ObjectMapper mapper=new ObjectMapper();
     private final AiProperties properties;
     private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
@@ -31,10 +35,16 @@ public class TutorAiClientImpl implements TutorAiClient {
             catch(InterruptedException ignored) {}
         });
         try {
-            var http=HttpRequest.newBuilder(URI.create(properties.getServerUrl()+"/v1/tutor/ask"))
+            var builder=HttpRequest.newBuilder(URI.create(properties.getServerUrl()+"/v1/tutor/ask"))
                     .timeout(Duration.ofSeconds(seconds)).header("X-Internal-Key",properties.getInternalKey())
                     .header("Content-Type","application/json").header("Accept","text/event-stream")
-                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(request))).build();
+                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(request)));
+            String mockError=mockErrorToForward();
+            if(mockError!=null) {
+                builder.header(MockErrorContext.HEADER,mockError);
+                log.warn("[AI-05] 개발용 X-Mock-Error 전달 code={}",mockError);
+            }
+            var http=builder.build();
             var response=client.send(http,HttpResponse.BodyHandlers.ofInputStream());
             body.set(response.body());
             if(response.statusCode()!=200) throw new ApiException(AiErrorCode.AI_UNAVAILABLE);
@@ -47,6 +57,11 @@ public class TutorAiClientImpl implements TutorAiClient {
             throw new ApiException(expired.get()?AiErrorCode.AI_TIMEOUT:AiErrorCode.AI_UNAVAILABLE);
         } catch(IOException e) { throw new ApiException(expired.get()?AiErrorCode.AI_TIMEOUT:AiErrorCode.AI_UNAVAILABLE); }
         finally { deadline.interrupt(); close(body.get()); if(expired.get()) Thread.interrupted(); }
+    }
+
+    /** ai.mock-error-passthrough가 켜져 있을 때만, 질문 요청의 X-Mock-Error 코드(AI-05 지정 포함). */
+    String mockErrorToForward() {
+        return properties.isMockErrorPassthrough()?MockErrorContext.codeFor("AI-05"):null;
     }
 
     private void parse(BufferedReader reader,TutorEventListener listener) throws IOException {

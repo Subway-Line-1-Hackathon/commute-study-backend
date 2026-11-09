@@ -179,4 +179,79 @@ class TutorAiClientImplTest {
             assertEquals(List.of("partial"),listener.deltas());
         } finally { release.countDown(); client.close(); }
     }
+
+    // ---- 개발용 X-Mock-Error 전달 (#36) ----
+
+    private static final String DONE_SSE = "event: done\ndata: {\"meta\":{\"model\":\"mock\",\"inputTokens\":1,\"outputTokens\":1,\"elapsedMs\":1,\"attempts\":1}}\n\n";
+
+    /** 받은 X-Mock-Error 값을 기록하고 바로 done을 주는 서버. 헤더가 없으면 null을 기록. */
+    private java.util.concurrent.atomic.AtomicReference<String> startHeaderRecordingSse() throws IOException {
+        var received = new java.util.concurrent.atomic.AtomicReference<String>("(not called)");
+        server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/", exchange -> {
+            received.set(exchange.getRequestHeaders().getFirst("X-Mock-Error"));
+            byte[] bytes = DONE_SSE.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            try (OutputStream os = exchange.getResponseBody()) { os.write(bytes); }
+        });
+        server.start();
+        return received;
+    }
+
+    private TutorAiClientImpl client(int port, boolean passthrough) {
+        AiProperties props = new AiProperties();
+        props.setServerUrl("http://localhost:" + port);
+        props.setInternalKey("test-key");
+        props.setMockErrorPassthrough(passthrough);
+        return new TutorAiClientImpl(props);
+    }
+
+    private static void inRequestWithMockError(String value) {
+        var request = new org.springframework.mock.web.MockHttpServletRequest();
+        request.addHeader("X-Mock-Error", value);
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                new org.springframework.web.context.request.ServletRequestAttributes(request));
+    }
+
+    @AfterEach
+    void clearRequest() {
+        org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+    }
+
+    @Test
+    void 설정이_켜져_있으면_질문_스레드에서도_X_Mock_Error를_넘긴다() throws Exception {
+        var received = startHeaderRecordingSse();
+        var client = client(server.getAddress().getPort(), true);
+        inRequestWithMockError("LLM_FAILED");
+        // TutorStreamService처럼 요청 스레드에서 맡긴 작업이 다른 스레드에서 질문을 보낸다
+        Runnable task = com.likelion.commute_study_api.ai.support.MockErrorContext.wrap(
+                () -> client.ask(sampleRequest(), new RecordingListener()));
+        try (var pool = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            pool.submit(task).get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertEquals("LLM_FAILED", received.get());
+    }
+
+    @Test
+    void 설정이_꺼져_있으면_넘기지_않는다() throws IOException {
+        var received = startHeaderRecordingSse();
+        inRequestWithMockError("LLM_FAILED");
+        client(server.getAddress().getPort(), false).ask(sampleRequest(), new RecordingListener());
+        org.junit.jupiter.api.Assertions.assertNull(received.get());
+    }
+
+    @Test
+    void 다른_기능을_지정한_값은_넘기지_않고_AI_05_지정은_넘긴다() throws IOException {
+        var received = startHeaderRecordingSse();
+        var client = client(server.getAddress().getPort(), true);
+
+        inRequestWithMockError("AI-03:LLM_TIMEOUT");
+        client.ask(sampleRequest(), new RecordingListener());
+        org.junit.jupiter.api.Assertions.assertNull(received.get());
+
+        inRequestWithMockError("AI-05:LLM_TIMEOUT");
+        client.ask(sampleRequest(), new RecordingListener());
+        assertEquals("LLM_TIMEOUT", received.get());
+    }
 }

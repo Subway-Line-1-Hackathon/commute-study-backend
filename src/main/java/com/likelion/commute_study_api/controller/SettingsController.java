@@ -7,11 +7,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "사용자", description = "내 정보, 닉네임·통학 설정")
 @RestController
 @RequestMapping("/api/users/me/settings")
 @SecurityRequirement(name = "bearerAuth")
@@ -39,6 +41,7 @@ public class SettingsController {
     @Operation(summary = "내 통학 설정 조회", description = "설정이 없으면 404 NOT_FOUND를 반환합니다.")
     @GetMapping
     @ApiResponse(responseCode = "200", description = "설정 조회 성공")
+    @ApiResponse(responseCode = "404", description = "NOT_FOUND: 아직 통학 설정을 저장하지 않음", content = @Content)
     public SettingsService.Settings get(@AuthenticationPrincipal Jwt jwt) {
         return service.get(jwt);
     }

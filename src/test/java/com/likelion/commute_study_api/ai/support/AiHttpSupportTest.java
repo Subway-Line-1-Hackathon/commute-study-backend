@@ -214,7 +214,49 @@ class AiHttpSupportTest {
 	}
 
 	@Test
-	void 요청_스레드_밖의_호출은_넘기지_않는다() throws IOException {
+	void 요청_없이_시작된_호출은_넘기지_않는다() throws IOException {
 		assertNull(forwardedHeader(true, null, false));
+	}
+
+	@Test
+	void 기능을_지정한_값은_그_기능의_호출에만_코드만_넘긴다() throws IOException {
+		AtomicReference<String> received = new AtomicReference<>("(not called)");
+		server = startHeaderRecordingServer(received);
+		AiProperties props = new AiProperties();
+		props.setServerUrl("http://localhost:" + server.getAddress().getPort());
+		props.setInternalKey("test-key");
+		props.setMockErrorPassthrough(true);
+		AiHttpSupport support = new AiHttpSupport(props);
+		inRequestWithMockError("AI-02:LLM_FAILED");
+
+		support.post("AI-01", "/v1/materials/process", Map.of(), JudgeResponse.class, 5);
+		assertNull(received.get());
+
+		support.post("AI-02", "/v1/questions/generate", Map.of(), JudgeResponse.class, 5);
+		assertEquals("LLM_FAILED", received.get());
+	}
+
+	@Test
+	void 비동기_스레드의_호출에도_작업을_맡긴_요청의_값을_넘긴다() throws Exception {
+		AtomicReference<String> received = new AtomicReference<>("(not called)");
+		server = startHeaderRecordingServer(received);
+		AiProperties props = new AiProperties();
+		props.setServerUrl("http://localhost:" + server.getAddress().getPort());
+		props.setInternalKey("test-key");
+		props.setMockErrorPassthrough(true);
+		AiHttpSupport support = new AiHttpSupport(props);
+		var executor = new org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor();
+		executor.setTaskDecorator(MockErrorContext.taskDecorator());
+		executor.initialize();
+		try {
+			inRequestWithMockError("LLM_TIMEOUT");
+			java.util.concurrent.CompletableFuture.runAsync(
+					() -> support.post("AI-06", "/v1/sessions/feedback", Map.of(), JudgeResponse.class, 5), executor)
+					.get(5, java.util.concurrent.TimeUnit.SECONDS);
+
+			assertEquals("LLM_TIMEOUT", received.get());
+		} finally {
+			executor.shutdown();
+		}
 	}
 }
