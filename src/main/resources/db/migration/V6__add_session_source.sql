@@ -9,3 +9,5 @@ alter table public.session alter column source set not null;
 
 alter table public.session
     add constraint session_source_check check (source in ('categories', 'wrongNotes'));
+
+alter table public.session alter column source set default 'categories';
