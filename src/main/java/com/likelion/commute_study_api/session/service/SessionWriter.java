@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.likelion.commute_study_api.common.study.StudyMode;
 import com.likelion.commute_study_api.session.repository.SessionRepository;
+import com.likelion.commute_study_api.session.dto.SessionSource;
 
 /**
  * 세션 저장만 한 트랜잭션으로 묶는다. SessionService.create 전체를 트랜잭션으로 묶으면
@@ -25,10 +26,10 @@ public class SessionWriter {
 	/** 출발하지 않은 이전 READY 세션을 지우고 새 세션과 문제 순서를 저장한다. */
 	@Transactional
 	public long save(UUID userId, List<Long> categoryIds, List<String> questionTypes, int difficulty, int studyMin,
-			StudyMode mode, List<Long> questionIds) {
+			StudyMode mode, SessionSource source, List<Long> questionIds) {
 		sessionRepository.deleteReadySessions(userId);
 		long sessionId = sessionRepository.insertSession(userId, categoryIds, questionTypes, difficulty, studyMin,
-				mode.name());
+				mode.name(), source);
 		sessionRepository.insertSessionQuestions(sessionId, questionIds);
 		return sessionId;
 	}

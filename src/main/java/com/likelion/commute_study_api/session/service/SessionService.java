@@ -124,7 +124,7 @@ public class SessionService {
 			throw new ApiException(SessionErrorCode.NO_QUESTIONS_AVAILABLE);
 		}
 
-		long sessionId = writer.save(userId, categoryIds, types, difficulty, plan.studyMin(), plan.mode(),
+		long sessionId = writer.save(userId, categoryIds, types, difficulty, plan.studyMin(), plan.mode(), request.source(),
 				picked.stream().map(CandidateQuestion::id).toList());
 
 		Shortage shortage = picked.size() < plan.questionCount()

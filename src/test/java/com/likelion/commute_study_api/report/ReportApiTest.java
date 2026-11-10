@@ -180,7 +180,7 @@ class ReportApiTest {
     }
     long question(long c) { jdbc.update("INSERT INTO question(category_id,type,stem,origin) VALUES (?,'SHORT','문제','PREGEN')",c); return max("question"); }
     long session(UUID user,String started,String mode) {
-        jdbc.update("INSERT INTO session(user_id,mode,status,started_at) VALUES (?,?,'COMPLETED',?)",user,mode,time(started)); return max("session");
+        jdbc.update("INSERT INTO session(user_id,mode,status,started_at,source) VALUES (?,?,'COMPLETED',?,'categories')",user,mode,time(started)); return max("session");
     }
     void member(long s,long q) { jdbc.update("INSERT INTO session_question VALUES (?,?,1)",s,q); }
     void answer(long s,long q,UUID user,Boolean correct,boolean self,String when) {

@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.url=jdbc:h2:mem:wrong-notes;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa","spring.datasource.password=","spring.datasource.driver-class-name=org.h2.Driver",
         "spring.flyway.enabled=false","spring.data.jpa.repositories.enabled=false","spring.sql.init.mode=always",
-        "spring.sql.init.schema-locations=classpath:material-test-schema.sql,classpath:study-read-test-schema.sql,classpath:wrong-note-test-schema.sql",
+        "spring.sql.init.schema-locations=classpath:material-test-schema.sql,classpath:study-read-test-schema.sql,classpath:report-test-schema.sql,classpath:wrong-note-test-schema.sql",
         "spring.autoconfigure.exclude=org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration"})
 @AutoConfigureMockMvc
 class WrongNoteApiTest {
@@ -155,6 +155,60 @@ class WrongNoteApiTest {
                 .andExpect(jsonPath("$.paths['/api/subjects/{id}/wrong-notes'].get.security[0].bearerAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/subjects/{id}/wrong-notes'].get.responses['200'].content['application/json'].examples.empty").exists());
         for(String code:List.of("400","401","404")) result.andExpect(jsonPath("$.paths['/api/subjects/{id}/wrong-notes'].get.responses['"+code+"']").exists());
+    }
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+    void correctReplayResolvesOpenNoteWithOrWithoutCategoryFilter(boolean filtered) throws Exception {
+        long q=note(category,USER,"OPEN",3,TIME);
+        long other=note(secondCategory,USER,"OPEN",2,TIME);
+        long unanswered=note(category,USER,"OPEN",1,TIME);
+        jdbc.update("INSERT INTO session(user_id,mode,status,category_ids,source) VALUES (?,'REVIEW','IN_PROGRESS',?,'wrongNotes')",
+                USER, filtered ? new Long[]{category} : null);
+        long session=max("session");
+        jdbc.update("INSERT INTO session_question(session_id,question_id,\"order\") VALUES (?,?,1),(?,?,2)",
+                session,q,session,unanswered);
+        var result=saveCorrect(session,q);
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM attempt WHERE session_id=? AND question_id=? AND correct=TRUE",Integer.class,session,q)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT status FROM wrong_note WHERE user_id=? AND question_id=?",String.class,USER,other)).isEqualTo("OPEN");
+        list(subject,category).andExpect(jsonPath("$.items[?(@.questionId == " + q + ")].status",contains("RESOLVED")))
+                .andExpect(jsonPath("$.items[?(@.questionId == " + q + ")].wrongCount",contains(3)));
+    }
+    @Test void correctAnswerInCategorySessionDoesNotResolveNote() throws Exception {
+        long q=note(category,USER,"OPEN",3,TIME);
+        long unanswered=note(category,USER,"OPEN",1,TIME);
+        jdbc.update("INSERT INTO wrong_note VALUES (?,?,4,'OPEN',?)",OTHER,q,TIME);
+        jdbc.update("INSERT INTO session(user_id,mode,status,category_ids,source) VALUES (?,'REVIEW','IN_PROGRESS',?,'categories')",
+                USER,new Long[]{category});
+        long session=max("session");
+        jdbc.update("INSERT INTO session_question(session_id,question_id,\"order\") VALUES (?,?,1),(?,?,2)",
+                session,q,session,unanswered);
+        var result=saveCorrect(session,q);
+        assertThat(result.saved()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT status FROM wrong_note WHERE user_id=? AND question_id=?",String.class,USER,q)).isEqualTo("OPEN");
+        assertThat(jdbc.queryForObject("SELECT status FROM wrong_note WHERE user_id=? AND question_id=?",String.class,OTHER,q)).isEqualTo("OPEN");
+    }
+    com.likelion.commute_study_api.session.dto.SaveAttemptsResponse saveCorrect(long session,long q) {
+        var progress=new SessionProgressRepository(jdbc);
+        // H2 fixture: persist the new attempt without PostgreSQL's ON CONFLICT syntax.
+        var testAttempts=new AttemptRepository(jdbc) {
+            @Override public List<Boolean> insertIfAbsent(UUID userId,long sessionId,List<NewAttempt> items) {
+                var inserted=new ArrayList<Boolean>();
+                for(var item:items) {
+                    int count=jdbc.update("INSERT INTO attempt(user_id,question_id,session_id,answer,correct,self_judged,answered_at) VALUES (?,?,?,?,?,?,?)",
+                            userId,item.questionId(),sessionId,item.answer(),item.correct(),item.selfJudged(),java.sql.Timestamp.from(item.answeredAt()));
+                    inserted.add(count==1);
+                }
+                return inserted;
+            }
+        };
+        var current=org.mockito.Mockito.mock(com.likelion.commute_study_api.common.auth.CurrentUser.class);
+        var token=org.springframework.security.oauth2.jwt.Jwt.withTokenValue("test").header("alg","none").subject(USER.toString()).build();
+        org.mockito.Mockito.when(current.ensureUser(token)).thenReturn(USER);
+        var service=new com.likelion.commute_study_api.session.service.AttemptService(current,progress,testAttempts,event -> {});
+        var answer=new com.likelion.commute_study_api.session.dto.SaveAttemptsRequest.AttemptItem(q,"O",null,null,TIME.toInstant());
+        var result=service.save(token,new com.likelion.commute_study_api.session.dto.SaveAttemptsRequest(session,List.of(answer)));
+        return result;
     }
     ResultActions list(long id,Long filter) throws Exception {
         var request=get("/api/subjects/{id}/wrong-notes",id).with(jwt().jwt(j->j.subject(USER.toString())));

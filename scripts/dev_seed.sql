@@ -114,8 +114,8 @@ begin
         select id into v_q_mc from public.question where category_id = v_category_id1 and type = 'MC' limit 1;
         select id into v_q_short from public.question where category_id = v_category_id1 and type = 'SHORT' limit 1;
 
-        insert into public.session (user_id, category_ids, question_types, difficulty, study_min, mode, status, started_at, ended_at)
-        values (v_user_id, array[v_category_id1], '["OX","MC","SHORT"]'::jsonb, 2, 15, 'CURRICULUM', 'COMPLETED', '2026-01-01 08:00:00+09', '2026-01-01 08:15:00+09')
+        insert into public.session (user_id, category_ids, question_types, difficulty, study_min, mode, status, source, started_at, ended_at)
+        values (v_user_id, array[v_category_id1], '["OX","MC","SHORT"]'::jsonb, 2, 15, 'CURRICULUM', 'COMPLETED', 'categories', '2026-01-01 08:00:00+09', '2026-01-01 08:15:00+09')
         returning id into v_session_id;
 
         insert into public.session_question (session_id, question_id, "order") values
