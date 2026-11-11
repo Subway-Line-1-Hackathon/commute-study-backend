@@ -378,6 +378,47 @@ class MaterialPipelineTest {
     }
 
     MockMultipartFile png(String name) { return new MockMultipartFile("file",name,"image/png",new byte[]{1,2}); }
+    MockMultipartFile jpg(String name) { return new MockMultipartFile("file",name,"image/jpeg",new byte[]{1,2}); }
+
+    /** #66: JPG도 PNG처럼 장별 경로를 저장하고 모든 장을 AI에 보낸다(첫 장만 가는 회귀 방지). */
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource(delimiter='|', value={
+            "a.jpg|JPG|jpg",
+            "a.jpg,b.jpeg|JPG|jpg,jpg",
+            "a.jpg,b.png,c.JPG|PNG|jpg,png,jpg"})
+    void jpgAndMixedImagesKeepEveryPageInOrder(String names,String expectedType,String extensions) throws Exception {
+        var files=new ArrayList<MockMultipartFile>();
+        for(String name:names.split(",")) files.add(name.endsWith(".png") ? png(name) : jpg(name));
+        long id=uploadBatch(files);
+        await().atMost(10,TimeUnit.SECONDS).untilAsserted(() -> verify(ai).process(any()));
+
+        assertThat(jdbc.queryForObject("SELECT file_type FROM material WHERE id=?",String.class,id)).isEqualTo(expectedType);
+        var ordered=jdbc.queryForList("SELECT file_url FROM material_file WHERE material_id=? ORDER BY page_order",String.class,id);
+        assertThat(ordered).hasSize(files.size());
+        assertThat(ordered.stream().map(ref -> ref.substring(ref.lastIndexOf('.')+1)).toList())
+                .containsExactly(extensions.split(","));
+        var uploaded=org.mockito.ArgumentCaptor.forClass(MaterialUploadValidator.ValidatedFile.class);
+        verify(storage,times(files.size())).upload(anyString(),uploaded.capture());
+        assertThat(uploaded.getAllValues()).allSatisfy(file ->
+                assertThat(file.contentType()).isIn("image/jpeg","image/png"));
+
+        var request=org.mockito.ArgumentCaptor.forClass(MaterialProcessRequest.class);
+        verify(ai).process(request.capture());
+        assertThat(request.getValue().fileType()).isEqualTo(expectedType);
+        assertThat(request.getValue().fileName()).isEqualTo(files.getFirst().getOriginalFilename());
+        assertThat(request.getValue().fileUrls()).hasSize(files.size());
+    }
+
+    @Test
+    void jpgWithMismatchedMimeOrMixedWithPdfIsRejectedBeforeStorage() throws Exception {
+        mvc.perform(multipart("/api/subjects/{id}/materials",subject).file(new MockMultipartFile("file","a.jpg","image/png",new byte[]{1}))
+                        .param("kind","LECTURE").with(jwt().jwt(j -> j.subject(USER.toString()))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("UNSUPPORTED_FILE_TYPE"));
+        mvc.perform(multipart("/api/subjects/{id}/materials",subject).file(jpg("a.jpg")).file(pdf())
+                        .param("kind","LECTURE").with(jwt().jwt(j -> j.subject(USER.toString()))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        verifyNoInteractions(storage);
+    }
     long uploadBatch(List<MockMultipartFile> files) throws Exception {
         var request=multipart("/api/subjects/{id}/materials",subject);
         files.forEach(request::file);

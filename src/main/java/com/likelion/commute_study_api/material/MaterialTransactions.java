@@ -29,9 +29,10 @@ public class MaterialTransactions {
                          java.util.List<MaterialUploadValidator.ValidatedFile> files, String kind) {
         var first = files.getFirst();
         long size = files.stream().mapToLong(file -> file.file().getSize()).sum();
-        long id = repository.insert(subjectId, references.getFirst(), first.fileName(), first.type(), kind, size,
+        String type = MaterialUploadValidator.batchType(files);
+        long id = repository.insert(subjectId, references.getFirst(), first.fileName(), type, kind, size,
                 Instant.now().plus(properties.getRetentionDays(), ChronoUnit.DAYS));
-        if ("PNG".equals(first.type())) repository.insertFiles(id, references);
+        if (MaterialUploadValidator.isImage(type)) repository.insertFiles(id, references);
         events.publishEvent(new MaterialUploadedEvent(id, userId));
         events.publishEvent(new MaterialQueuedEvent(id, false));
         return id;

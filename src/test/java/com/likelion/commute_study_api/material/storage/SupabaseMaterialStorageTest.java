@@ -122,4 +122,15 @@ class SupabaseMaterialStorageTest {
         storage.delete(reference);
         assertThat(calls).contains("DELETE /storage/v1/object/"+reference);
     }
+
+    @Test
+    void jpgReferencesSupportUploadSignAndDelete() {
+        String reference=storage.reference(UUID.randomUUID(),"jpg");
+        var file=new MaterialUploadValidator().validate(List.of(new MockMultipartFile("file","p.jpeg","image/jpeg",new byte[]{1})),"LECTURE");
+        storage.upload(reference,file);
+        assertThat(storage.signedUrl(reference,600)).contains(reference);
+        storage.delete(reference);
+        assertThat(calls).contains("DELETE /storage/v1/object/"+reference);
+        assertThatThrownBy(() -> storage.delete(reference.replace(".jpg",".jpeg"))).isInstanceOf(ApiException.class);
+    }
 }

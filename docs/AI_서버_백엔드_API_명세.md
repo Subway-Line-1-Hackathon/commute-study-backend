@@ -70,7 +70,7 @@
 | 400 | `INVALID_REQUEST` | 요청 형식 오류·모르는 필드·허용하지 않은 파일 주소. `message`에 문제의 위치가 들어 있다 | 호출 코드 버그로 보고 로그만 남기며 사용자에게는 `INTERNAL_ERROR` | 구현됨 |
 | 401 | `UNAUTHORIZED` | `X-Internal-Key`가 틀림 | 환경변수를 확인하고 사용자에게는 `AI_UNAVAILABLE` | 구현됨 |
 | 422 | `UNSUPPORTED_FILE` | 열 수 없거나 지원하지 않는 파일(구버전 .ppt도 해당), 파일 30MB 초과 | 자료 `FAILED`, 재시도 무의미 | 구현됨 |
-| 422 | `PAGE_LIMIT_EXCEEDED` | PDF·PPT 100쪽, PNG 20장 초과 | 자료 `FAILED` | 구현됨 |
+| 422 | `PAGE_LIMIT_EXCEEDED` | PDF·PPT 100쪽, 이미지(PNG·JPG) 20장 초과 | 자료 `FAILED` | 구현됨 |
 | 422 | `TEXT_EXTRACTION_FAILED` | 텍스트 인식 실패(전체 글자가 200자 미만) | 자료 `FAILED`, 재시도 무의미 | 구현됨 |
 | 502 | `FILE_FETCH_FAILED` | 파일 URL 다운로드 실패 | 서명 URL을 새로 만들어 1회 다시 호출, 또 실패하면 `FAILED` | 구현됨 · 합의 #1 |
 | 502 | `LLM_FAILED` | AI 응답 오류. 시도 횟수를 다 쓴 뒤 반환 | 기능별 실패 처리(아래 표) | 구현됨 |
@@ -108,7 +108,7 @@ UsageMeta  { model: string, inputTokens: int, outputTokens: int, elapsedMs: int,
 
 | JSON 필드 | 값 | 백엔드 DB (`V1__init_schema.sql`) |
 | --- | --- | --- |
-| `fileType` | `PDF` / `PPT` / `PNG` | `material_file_type` 열거형 |
+| `fileType` | `PDF` / `PPT` / `PNG` / `JPG` | `material_file_type` 열거형 (JPG는 V7, #66) |
 | `kind` | `LECTURE` / `PAST_EXAM` | `material_kind` |
 | `type` | `OX` / `MC` / `SHORT` / `ESSAY` | `question_type` |
 | `difficulty` | 1(하), 2(중), 3(상) | `question.difficulty` int |
@@ -119,7 +119,7 @@ UsageMeta  { model: string, inputTokens: int, outputTokens: int, elapsedMs: int,
 
 ### 쪽 번호
 
-- PDF는 뷰어 기준 1부터, PPT는 슬라이드 번호, PNG는 `fileUrls` 배열 순서(1부터)를 쓴다.
+- PDF는 뷰어 기준 1부터, PPT는 슬라이드 번호, 이미지(PNG·JPG)는 `fileUrls` 배열 순서(1부터)를 쓴다.
 - PPT는 `.pptx`만 처리한다. 구버전 `.ppt`는 `UNSUPPORTED_FILE`이므로 백엔드 업로드 단계에서 `.pptx`만 받는다.
 - 슬라이드 속 이미지의 글자는 읽지 않는다(MVP).
 
@@ -154,15 +154,15 @@ UsageMeta  { model: string, inputTokens: int, outputTokens: int, elapsedMs: int,
 | 필드 | 타입 | 규칙 | 백엔드 값 |
 | --- | --- | --- | --- |
 | `materialId` | int | 필수 | `material.id` |
-| `fileType` | `PDF`/`PPT`/`PNG` | 필수 | `material.file_type` |
+| `fileType` | `PDF`/`PPT`/`PNG`/`JPG` | 필수 | `material.file_type`. PNG·JPG를 섞어 올리면 하나라도 PNG가 있을 때 `PNG`, 전부 JPG면 `JPG`(AI 서버는 이미지 요청이면 파일마다 내용으로 형식을 구분) |
 | `kind` | `LECTURE`/`PAST_EXAM` | 필수. 족보도 MVP에서는 같이 단원화한다(합의 #4) | `material.kind` |
 | `fileName` | string | 필수. AI 서버는 쓰지 않지만 빠지면 400. V1에 파일명 컬럼이 없어 V2에서 `material.file_name`을 추가하거나 Storage 경로에서 만든다(백엔드 결정) | 업로드 원본 파일명 |
-| `fileUrls` | URL 1\~20개 | PDF·PPT는 정확히 1개, PNG는 1\~20개를 쪽 순서대로(합의 #3). Supabase **서명 URL**이어야 하고 호스트가 AI 서버의 `SUPABASE_HOST`와 같아야 한다. 리다이렉트는 따라가지 않는다 | 호출 직전에 만든 서명 URL(유효시간 10분 제안, 합의 #1) |
+| `fileUrls` | URL 1\~20개 | PDF·PPT는 정확히 1개, 이미지(PNG·JPG)는 1\~20개를 쪽 순서대로(합의 #3, #66). Supabase **서명 URL**이어야 하고 호스트가 AI 서버의 `SUPABASE_HOST`와 같아야 한다. 리다이렉트는 따라가지 않는다 | 호출 직전에 만든 서명 URL(유효시간 10분 제안, 합의 #1) |
 
 ### AI 서버의 처리와 한계
 
 - 파일당 30MB를 넘으면 `UNSUPPORTED_FILE`이다. 다운로드 제한시간은 30초다. 백엔드도 업로드 단계에서 30MB를 막는다.
-- 쪽수(PDF·PPT 100쪽, PNG 20장)는 파일을 열어야 알 수 있어 **AI 서버가 판단**하고 `PAGE_LIMIT_EXCEEDED`로 돌려준다.
+- 쪽수(PDF·PPT 100쪽, 이미지 20장)는 파일을 열어야 알 수 있어 **AI 서버가 판단**하고 `PAGE_LIMIT_EXCEEDED`로 돌려준다.
 - 텍스트가 없는 쪽만 OCR한다. PPT 슬라이드 속 이미지의 글자는 읽지 않는다. 전체 글자가 200자를 넘지 못하면 `TEXT_EXTRACTION_FAILED`다.
 
 ### 응답 200
@@ -201,7 +201,7 @@ UsageMeta  { model: string, inputTokens: int, outputTokens: int, elapsedMs: int,
 | 사용자 재시도 | `FAILED` → `PROCESSING`(M5). 같은 파일로 1회 다시 호출 |
 | 서버 재시작으로 호출이 끊김 | `PROCESSING`이 10분을 넘으면 `FAILED`로 정리(백엔드 처리) |
 
-업로드 이슈의 완료 조건도 이에 맞춘다. 백엔드는 형식(`.pdf`, `.pptx`, `.png`)과 30MB만 막고 쪽수 초과는 `FAILED`의 `error_message`로 알린다.
+업로드 이슈의 완료 조건도 이에 맞춘다. 백엔드는 형식(`.pdf`, `.pptx`, `.png`, `.jpg`·`.jpeg`)과 30MB만 막고 쪽수 초과는 `FAILED`의 `error_message`로 알린다.
 
 ### mock 동작
 

@@ -94,7 +94,7 @@ public class SupabaseMaterialStorage implements MaterialStorage {
     }
 
     private String safeReference(String value) {
-        if (value == null || !value.matches("[A-Za-z0-9_-]+/[a-f0-9-]+/[a-f0-9-]+\\.(pdf|pptx|png)"))
+        if (value == null || !value.matches("[A-Za-z0-9_-]+/[a-f0-9-]+/[a-f0-9-]+\\.(pdf|pptx|png|jpg)"))
             throw unavailable();
         return value;
     }
