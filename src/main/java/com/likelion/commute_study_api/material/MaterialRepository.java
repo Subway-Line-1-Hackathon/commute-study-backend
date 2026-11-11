@@ -55,6 +55,22 @@ public class MaterialRepository {
         return references;
     }
 
+    /**
+     * 회원 탈퇴(#67)용: 이 사용자의 모든 자료 원본 경로(PDF·PPTX는 material.file_url, PNG는 material_file 전체).
+     * 이미 정리된 자료(EXPIRED)는 경로가 빈 문자열이라 뺀다. 상태와 관계없이 모두 돌려준다(처리 중 자료 포함).
+     */
+    public java.util.List<String> fileReferencesOfUser(UUID userId) {
+        return jdbc.queryForList("""
+                SELECT m.file_url FROM public.material m JOIN public.subject s ON s.id = m.subject_id
+                WHERE s.user_id = ? AND m.file_url <> ''
+                UNION
+                SELECT f.file_url FROM public.material_file f
+                JOIN public.material m ON m.id = f.material_id JOIN public.subject s ON s.id = m.subject_id
+                WHERE s.user_id = ? AND f.file_url <> ''
+                ORDER BY 1
+                """, String.class, userId, userId);
+    }
+
     public Material get(long id) {
         return jdbc.queryForObject("SELECT * FROM public.material WHERE id = ?", this::map, id);
     }
