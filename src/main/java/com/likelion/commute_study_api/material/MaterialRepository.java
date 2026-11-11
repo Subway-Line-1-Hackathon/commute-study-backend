@@ -45,13 +45,13 @@ public class MaterialRepository {
         }
     }
 
-    /** Also reusable by slice 10: PNG deletion must remove all objects, not just material.file_url. */
+    /** Also reusable by slice 10: image (PNG·JPG) deletion must remove all objects, not just material.file_url. */
     public java.util.List<String> fileReferences(Material material) {
-        if (!"PNG".equals(material.type())) return java.util.List.of(material.reference());
+        if (!MaterialUploadValidator.isImage(material.type())) return java.util.List.of(material.reference());
         var references = jdbc.queryForList(
                 "SELECT file_url FROM public.material_file WHERE material_id = ? ORDER BY page_order ASC",
                 String.class, material.id());
-        if (references.isEmpty() || references.size() > 20) throw new IllegalStateException("Invalid PNG file references");
+        if (references.isEmpty() || references.size() > 20) throw new IllegalStateException("Invalid image file references");
         return references;
     }
 
