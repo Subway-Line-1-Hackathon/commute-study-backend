@@ -5,7 +5,7 @@ import org.springframework.http.HttpStatus;
 
 public enum MaterialErrorCode implements ErrorCode {
     FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "파일은 30MB 이하여야 합니다."),
-    UNSUPPORTED_FILE_TYPE(HttpStatus.BAD_REQUEST, "PDF, PPTX 또는 PNG 파일만 지원합니다."),
+    UNSUPPORTED_FILE_TYPE(HttpStatus.BAD_REQUEST, "PDF, PPTX, PNG, JPG 파일만 지원합니다."),
     STORAGE_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "자료 저장소에 접근할 수 없습니다.");
     private final HttpStatus status;
     private final String message;

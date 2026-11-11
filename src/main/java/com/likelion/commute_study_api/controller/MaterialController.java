@@ -22,14 +22,19 @@ public class MaterialController {
     private final MaterialService service;
     public MaterialController(MaterialService service) { this.service = service; }
 
-    @Operation(summary = "강의자료 업로드", description = "PDF/PPTX 1개 또는 같은 file 필드로 PNG 1~20장. 전송 순서가 쪽 순서이며 파일당 최대 30MiB. kind=LECTURE.")
+    @Operation(summary = "강의자료 업로드", description = """
+            PDF/PPTX 1개, 또는 같은 `file` 필드로 이미지(PNG·JPG) 1~20장. kind=LECTURE.
+            - 이미지는 전송 순서가 쪽 순서다. PNG와 JPG를 섞어 보내도 된다(스크린샷과 폰 사진)
+            - JPG는 `.jpg`·`.jpeg`(`image/jpeg`). 폰 사진의 회전 정보는 AI 서버가 반영한다
+            - iPhone HEIC는 받지 않는다. 앱에서 JPG로 바꿔 올린다
+            - 파일당 최대 30MiB. PDF·PPT 100쪽 초과는 AI 서버가 판단해 자료가 `FAILED`가 된다""")
     @ApiResponse(responseCode = "201", description = "저장 완료. 단원화(AI-01)는 뒤에서 진행되므로 상태 조회 API로 확인한다",
             content = @Content(mediaType = "application/json", examples = @ExampleObject(value = """
             {"materialId":8,"status":"UPLOADED"}
             """)))
     @ApiResponse(responseCode = "400", description = """
-            VALIDATION_ERROR: 파일 없음·빈 파일, PNG 20장 초과, PNG가 아닌 여러 파일, kind가 LECTURE가 아님 /
-            UNSUPPORTED_FILE_TYPE: PDF·PPTX·PNG가 아닌 파일""", content = @Content)
+            VALIDATION_ERROR: 파일 없음·빈 파일, 이미지 20장 초과, 이미지가 아닌 파일을 여러 개 보냄, kind가 LECTURE가 아님 /
+            UNSUPPORTED_FILE_TYPE: PDF·PPTX·PNG·JPG가 아닌 파일, 확장자와 Content-Type 불일치(HEIC 포함)""", content = @Content)
     @ApiResponse(responseCode = "404", description = "NOT_FOUND: 없거나 다른 사용자의 과목", content = @Content)
     @ApiResponse(responseCode = "413", description = "FILE_TOO_LARGE: 파일 하나가 30MiB 초과", content = @Content)
     @ApiResponse(responseCode = "502", description = "STORAGE_UNAVAILABLE: 자료 저장소(Supabase Storage)에 접근할 수 없음",

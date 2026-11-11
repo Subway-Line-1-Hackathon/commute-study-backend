@@ -13,5 +13,5 @@ import lombok.Setter;
 public class UploadProperties {
 
 	private int maxFileMb = 30;
-	private List<String> allowedTypes = List.of("PDF", "PPTX", "PNG");
+	private List<String> allowedTypes = List.of("PDF", "PPTX", "PNG", "JPG");
 }

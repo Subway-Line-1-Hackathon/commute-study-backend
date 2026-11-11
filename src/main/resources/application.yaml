@@ -87,7 +87,7 @@ question:
 
 upload:
   max-file-mb: 30
-  allowed-types: PDF,PPTX,PNG
+  allowed-types: PDF,PPTX,PNG,JPG
 
 material:
   # One gate covers scheduled and post-commit cleanup; never enable on shared-DB local development.
