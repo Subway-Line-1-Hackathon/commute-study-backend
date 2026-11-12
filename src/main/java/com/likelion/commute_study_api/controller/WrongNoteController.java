@@ -17,9 +17,9 @@ import org.springframework.web.bind.annotation.*;
 public class WrongNoteController {
     private final WrongNoteService service;
     public WrongNoteController(WrongNoteService service) { this.service=service; }
-    @Operation(summary="과목별 오답노트",description="최근 오답 시각, questionId 내림차순. 과목별 OPEN/RESOLVED 상한(기본 100/50) 적용 후 단원 필터를 적용합니다. 초과 행은 삭제하지 않습니다. 재풀이는 POST /api/sessions의 source: wrongNotes를 사용합니다.")
+    @Operation(summary="과목별 오답노트",description="최근 오답 시각, questionId 내림차순. 과목별 OPEN/RESOLVED 상한(기본 100/50) 적용 후 단원 필터를 적용합니다. 초과 행은 삭제하지 않습니다. 재풀이는 POST /api/sessions의 source: wrongNotes를 사용합니다. `choices`는 객관식만 값이 있고 아니면 null입니다. `lastAnswer`는 가장 최근에 틀린 내 답(없으면 null)입니다. 해설은 GET /api/questions/{id}/explanation로 따로 받습니다.")
     @ApiResponse(responseCode="200",description="오답 목록 또는 빈 items",content=@Content(mediaType="application/json",examples={
-            @ExampleObject(name="notes",value="{\"items\":[{\"questionId\":176,\"categoryId\":11,\"stem\":\"스택의 특징은?\",\"wrongCount\":3,\"status\":\"OPEN\",\"lastWrongAt\":\"2026-11-08T13:30:00Z\"},{\"questionId\":177,\"categoryId\":11,\"stem\":\"큐의 특징은?\",\"wrongCount\":2,\"status\":\"RESOLVED\",\"lastWrongAt\":\"2026-11-07T15:20:00Z\"}]}"),
+            @ExampleObject(name="notes",value="{\"items\":[{\"questionId\":176,\"categoryId\":11,\"categoryName\":\"스택과 큐\",\"type\":\"MC\",\"stem\":\"스택의 특징은?\",\"choices\":[\"선입선출\",\"후입선출\",\"무작위\",\"정렬됨\"],\"answer\":\"2\",\"sourcePage\":12,\"lastAnswer\":\"1\",\"wrongCount\":3,\"status\":\"OPEN\",\"lastWrongAt\":\"2026-11-08T13:30:00Z\"},{\"questionId\":177,\"categoryId\":11,\"categoryName\":\"스택과 큐\",\"type\":\"SHORT\",\"stem\":\"큐의 특징은?\",\"choices\":null,\"answer\":\"선입선출\",\"sourcePage\":null,\"lastAnswer\":\"후입선출\",\"wrongCount\":2,\"status\":\"RESOLVED\",\"lastWrongAt\":\"2026-11-07T15:20:00Z\"}]}"),
             @ExampleObject(name="empty",value="{\"items\":[]}")}))
     @ApiResponse(responseCode="400",description="VALIDATION_ERROR: 잘못된 categoryId",content=@Content)
     @ApiResponse(responseCode="401",description="JWT 인증 필요",content=@Content)
