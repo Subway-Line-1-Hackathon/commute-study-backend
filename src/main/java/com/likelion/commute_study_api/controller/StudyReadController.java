@@ -30,9 +30,9 @@ public class StudyReadController {
         return service.categories(id,jwt);
     }
 
-    @Operation(summary="문제 해설 조회",description="본인 과목의 문제 해설·근거 쪽수만 반환합니다. 원본 자료가 EXPIRED여도 조회할 수 있으며 값이 없는 필드는 null입니다.")
-    @ApiResponse(responseCode="200",description="해설 및 근거 쪽수",content=@Content(mediaType="application/json",examples=@ExampleObject(value="""
-            {"explanation":"각 성분의 곱을 더합니다.","sourcePage":7}
+    @Operation(summary="문제 해설 조회",description="본인 과목의 문제 해설·근거 쪽수·정답을 반환합니다. 원본 자료가 EXPIRED여도 조회할 수 있으며 값이 없는 필드는 null입니다. `answer`(대표 정답)는 풀기 전 노출을 막기 위해 본인이 이미 답한 문제에만 내려주고, 아니면 null입니다.")
+    @ApiResponse(responseCode="200",description="해설·근거 쪽수·정답",content=@Content(mediaType="application/json",examples=@ExampleObject(value="""
+            {"explanation":"각 성분의 곱을 더합니다.","sourcePage":7,"answer":"4"}
             """)))
     @ApiResponse(responseCode="404",description="NOT_FOUND: 존재하지 않거나 다른 사용자의 문제",content=@Content)
     @ApiResponse(responseCode="401",description="UNAUTHORIZED: JWT 인증 필요",content=@Content)
