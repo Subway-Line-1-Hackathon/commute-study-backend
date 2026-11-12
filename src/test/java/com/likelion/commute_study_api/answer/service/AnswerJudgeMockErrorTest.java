@@ -101,17 +101,17 @@ class AnswerJudgeMockErrorTest {
 
 	@Test
 	void 헤더가_없으면_mock_성공_응답() {
-		assertEquals(JudgeAnswerResponse.judged(true, "큐를 뜻하는 다른 표현이에요."), judgeWithHeader(null));
+		assertEquals(JudgeAnswerResponse.judged(true, "큐를 뜻하는 다른 표현이에요.", "큐"), judgeWithHeader(null));
 	}
 
 	@Test
 	void LLM_TIMEOUT이면_자가_판정() {
-		assertEquals(JudgeAnswerResponse.timedOut(), judgeWithHeader("LLM_TIMEOUT"));
+		assertEquals(JudgeAnswerResponse.timedOut("큐"), judgeWithHeader("LLM_TIMEOUT"));
 	}
 
 	@Test
 	void LLM_FAILED면_자가_판정() {
-		assertEquals(JudgeAnswerResponse.timedOut(), judgeWithHeader("LLM_FAILED"));
+		assertEquals(JudgeAnswerResponse.timedOut("큐"), judgeWithHeader("LLM_FAILED"));
 	}
 
 	@Test
@@ -120,6 +120,6 @@ class AnswerJudgeMockErrorTest {
 		request.addHeader("X-Mock-Error", "LLM_FAILED");
 		RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
 
-		assertEquals(JudgeAnswerResponse.matched(), service.judge(JWT, new JudgeAnswerRequest(1L, "Queue")));
+		assertEquals(JudgeAnswerResponse.matched("큐"), service.judge(JWT, new JudgeAnswerRequest(1L, "Queue")));
 	}
 }

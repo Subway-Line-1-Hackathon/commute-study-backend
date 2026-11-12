@@ -19,19 +19,26 @@ class JudgeAnswerDtoTest {
 	private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
 	@Test
-	void 정규화_일치는_correct만() {
-		assertEquals("{\"correct\":true}", mapper.writeValueAsString(JudgeAnswerResponse.matched()));
+	void 정규화_일치는_correct와_answer() {
+		assertEquals("{\"correct\":true,\"answer\":\"큐\"}", mapper.writeValueAsString(JudgeAnswerResponse.matched("큐")));
 	}
 
 	@Test
-	void AI_판정은_correct와_reason() {
-		assertEquals("{\"correct\":false,\"reason\":\"다른 개념이에요.\"}",
-				mapper.writeValueAsString(JudgeAnswerResponse.judged(false, "다른 개념이에요.")));
+	void AI_판정은_correct_reason_answer() {
+		assertEquals("{\"correct\":false,\"reason\":\"다른 개념이에요.\",\"answer\":\"큐\"}",
+				mapper.writeValueAsString(JudgeAnswerResponse.judged(false, "다른 개념이에요.", "큐")));
 	}
 
 	@Test
-	void 시간_초과는_correct_null을_빼지_않고_내려준다() {
-		assertEquals("{\"correct\":null,\"timeout\":true}", mapper.writeValueAsString(JudgeAnswerResponse.timedOut()));
+	void 시간_초과는_correct_null을_빼지_않고_answer와_함께_내려준다() {
+		assertEquals("{\"correct\":null,\"timeout\":true,\"answer\":\"큐\"}",
+				mapper.writeValueAsString(JudgeAnswerResponse.timedOut("큐")));
+	}
+
+	@Test
+	void answer가_없으면_null로_내려간다() {
+		assertEquals("{\"correct\":null,\"timeout\":true,\"answer\":null}",
+				mapper.writeValueAsString(JudgeAnswerResponse.timedOut(null)));
 	}
 
 	@Test
