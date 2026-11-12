@@ -18,7 +18,7 @@ import com.likelion.commute_study_api.common.study.StudyMode;
  *
  * <pre>
  * studyMin       = studyMinOverride ?: 편도 시간
- * mode           = studyMin >= 20 ? CURRICULUM : REVIEW
+ * mode           = studyMin >= 11 ? CURRICULUM : REVIEW
  * summaryMin     = CURRICULUM이고 skipSummary가 아니면 3, 아니면 0
  * questionCount  = min(30, floor((studyMin - summaryMin) / 선택한 유형의 평균 소요 시간))
  * </pre>
