@@ -44,23 +44,38 @@ class SessionPlanCalculatorTest {
 	}
 
 	@Test
-	void 십구분_객관식은_REVIEW이고_요약을_빼지_않아_19문제() {
-		SessionPlan plan = calculator.plan(19, null, List.of("MC"), false);
+	void 십분_객관식은_REVIEW이고_요약을_빼지_않아_10문제() {
+		SessionPlan plan = calculator.plan(10, null, List.of("MC"), false);
 
 		assertEquals(StudyMode.REVIEW, plan.mode());
 		assertEquals(0, plan.summaryMin());
-		assertEquals(19, plan.questionCount());
+		assertEquals(10, plan.questionCount());
+	}
+
+	@Test
+	void 십일분이면_CURRICULUM_경계값() {
+		SessionPlan plan = calculator.plan(11, null, List.of("MC"), false);
+
+		assertEquals(StudyMode.CURRICULUM, plan.mode());
+	}
+
+	@Test
+	void 십일분이면_가장_느린_유형이어도_최소_오문제() {
+		// (11 - 3) / 1.5 = 5.3 → 5
+		SessionPlan plan = calculator.plan(11, null, List.of("SHORT"), false);
+
+		assertEquals(5, plan.questionCount());
 	}
 
 	// ---- 그 밖의 규칙 ----
 
 	@Test
 	void studyMinOverride가_있으면_편도_시간_대신_쓴다() {
-		SessionPlan plan = calculator.plan(50, 19, List.of("MC"), false);
+		SessionPlan plan = calculator.plan(50, 10, List.of("MC"), false);
 
-		assertEquals(19, plan.studyMin());
+		assertEquals(10, plan.studyMin());
 		assertEquals(StudyMode.REVIEW, plan.mode());
-		assertEquals(19, plan.questionCount());
+		assertEquals(10, plan.questionCount());
 	}
 
 	@Test
