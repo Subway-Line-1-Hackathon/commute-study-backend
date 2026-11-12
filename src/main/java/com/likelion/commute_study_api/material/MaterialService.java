@@ -49,6 +49,10 @@ public class MaterialService {
         }
     }
 
+    public MaterialList list(Jwt jwt) {
+        return new MaterialList(repository.listByUser(currentUser.authenticatedId(jwt)));
+    }
+
     public Status status(Jwt jwt, long id) {
         var material = repository.owned(id, currentUser.ensureUser(jwt));
         return new Status(material.status(), repository.categoryCount(id), "FAILED".equals(material.status()) ? material.error() : null);
@@ -61,5 +65,6 @@ public class MaterialService {
 
     public record Uploaded(long materialId, String status) {}
     public record Status(String status, int categoryCount, @JsonInclude(JsonInclude.Include.NON_NULL) String error) {}
+    public record MaterialList(List<MaterialRepository.MaterialSummary> materials) {}
 }
 

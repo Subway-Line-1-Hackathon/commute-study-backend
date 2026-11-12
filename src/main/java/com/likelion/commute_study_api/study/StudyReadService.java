@@ -28,8 +28,8 @@ public class StudyReadService {
             Double accuracy=row.graded()==0 ? null : (double)row.correct()/row.graded();
             State state="PREPARING".equals(row.questionStatus()) ? State.PREPARING
                     : progress==0 ? State.NOT_STARTED : progress>=1 ? State.COMPLETED : State.IN_PROGRESS;
-            return new CategoryItem(row.id(),row.name(),row.pageStart(),row.pageEnd(),progress,accuracy,
-                    row.lastStudiedAt(),state,row.questionStatus());
+            return new CategoryItem(row.id(),row.materialId(),row.name(),row.pageStart(),row.pageEnd(),row.summary(),
+                    progress,accuracy,row.lastStudiedAt(),state,row.questionStatus());
         }).toList();
         return new CategoryList(items,recommendation.select(items));
     }
@@ -40,6 +40,6 @@ public class StudyReadService {
 
     public enum State { PREPARING, NOT_STARTED, IN_PROGRESS, COMPLETED }
     public record CategoryList(List<CategoryItem> categories,Long recommendedId) {}
-    public record CategoryItem(long id,String name,int pageStart,int pageEnd,double progress,Double accuracy,
-                               OffsetDateTime lastStudiedAt,State state,String questionStatus) {}
+    public record CategoryItem(long id,long materialId,String name,int pageStart,int pageEnd,String summary,
+                               double progress,Double accuracy,OffsetDateTime lastStudiedAt,State state,String questionStatus) {}
 }
