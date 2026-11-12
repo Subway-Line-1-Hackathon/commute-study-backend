@@ -61,15 +61,15 @@ class AnswerJudgeServiceTest {
 
 	@Test
 	void 정규화해서_정답_목록과_같으면_AI_없이_정답() {
-		assertEquals(JudgeAnswerResponse.matched(), judge(1, " QUEUE. "));
-		assertEquals(JudgeAnswerResponse.matched(), judge(1, "큐"));
+		assertEquals(JudgeAnswerResponse.matched("큐"), judge(1, " QUEUE. "));
+		assertEquals(JudgeAnswerResponse.matched("큐"), judge(1, "큐"));
 		assertTrue(ai.calls.isEmpty());
 	}
 
 	@Test
 	void 공백이나_문장부호뿐인_답은_AI_없이_오답() {
-		assertEquals(JudgeAnswerResponse.blank(), judge(1, ""));
-		assertEquals(JudgeAnswerResponse.blank(), judge(1, " ?! "));
+		assertEquals(JudgeAnswerResponse.blank("큐"), judge(1, ""));
+		assertEquals(JudgeAnswerResponse.blank("큐"), judge(1, " ?! "));
 		assertTrue(ai.calls.isEmpty());
 	}
 
@@ -81,7 +81,7 @@ class AnswerJudgeServiceTest {
 
 		var result = judge(1, "대기열 ");
 
-		assertEquals(JudgeAnswerResponse.judged(true, "큐를 뜻하는 다른 표현이에요."), result);
+		assertEquals(JudgeAnswerResponse.judged(true, "큐를 뜻하는 다른 표현이에요.", "큐"), result);
 		assertEquals(List.of(new JudgeRequest("먼저 넣은 데이터가 먼저 나오는 자료구조는?", List.of("큐", "Queue"),
 				"큐는 FIFO 구조다.", "대기열 ")), ai.calls);
 	}
@@ -90,14 +90,14 @@ class AnswerJudgeServiceTest {
 	void AI가_오답이라고_하면_오답과_이유() {
 		ai.response = new JudgeResponse(false, "스택은 나중에 넣은 것이 먼저 나와요.");
 
-		assertEquals(JudgeAnswerResponse.judged(false, "스택은 나중에 넣은 것이 먼저 나와요."), judge(1, "스택"));
+		assertEquals(JudgeAnswerResponse.judged(false, "스택은 나중에 넣은 것이 먼저 나와요.", "큐"), judge(1, "스택"));
 	}
 
 	@Test
 	void 정답_목록이_비어_있으면_대표_정답으로_비교하고_AI에도_보낸다() {
 		questions.add(USER, new JudgeQuestion(2, "SHORT", "스택의 삽입 연산은?", "push", List.of(), null));
 
-		assertEquals(JudgeAnswerResponse.matched(), judge(2, "PUSH"));
+		assertEquals(JudgeAnswerResponse.matched("push"), judge(2, "PUSH"));
 
 		ai.response = new JudgeResponse(false, "다른 연산이에요.");
 		judge(2, "pop");
@@ -108,7 +108,7 @@ class AnswerJudgeServiceTest {
 	void 정답_데이터가_아예_없으면_AI를_부르지_않고_자가_판정() {
 		questions.add(USER, new JudgeQuestion(3, "SHORT", "지문", null, List.of(" "), "해설"));
 
-		assertEquals(JudgeAnswerResponse.timedOut(), judge(3, "아무 답"));
+		assertEquals(JudgeAnswerResponse.timedOut(null), judge(3, "아무 답"));
 		assertTrue(ai.calls.isEmpty());
 	}
 
@@ -117,20 +117,20 @@ class AnswerJudgeServiceTest {
 	@Test
 	void AI_시간_초과면_correct_null과_timeout() {
 		ai.failure = new ApiException(AiErrorCode.AI_TIMEOUT);
-		assertEquals(JudgeAnswerResponse.timedOut(), judge(1, "대기열"));
+		assertEquals(JudgeAnswerResponse.timedOut("큐"), judge(1, "대기열"));
 	}
 
 	@Test
 	void AI_실패면_correct_null과_timeout() {
 		ai.failure = new ApiException(AiErrorCode.AI_UNAVAILABLE);
-		assertEquals(JudgeAnswerResponse.timedOut(), judge(1, "대기열"));
+		assertEquals(JudgeAnswerResponse.timedOut("큐"), judge(1, "대기열"));
 	}
 
 	@Test
 	void 예상_못_한_예외도_자가_판정으로_넘기고_재시도하지_않는다() {
 		ai.failure = new IllegalStateException("응답 파싱 실패");
 
-		assertEquals(JudgeAnswerResponse.timedOut(), judge(1, "대기열"));
+		assertEquals(JudgeAnswerResponse.timedOut("큐"), judge(1, "대기열"));
 		assertEquals(1, ai.calls.size());
 	}
 

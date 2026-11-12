@@ -147,21 +147,38 @@ class StudyReadApiTest {
     }
 
     @ParameterizedTest @ValueSource(strings={"READY","EXPIRED"})
-    void explanationRemainsAvailableAndReturnsOnlyTwoFields(String state) throws Exception {
+    void explanationRemainsAvailableButAnswerIsNullBeforeAttempt(String state) throws Exception {
         long c=category("AVAILABLE",1), q=question(c,"PREGEN");
         jdbc.update("UPDATE material SET status=? WHERE id=?",state,material);
         jdbc.update("UPDATE question SET explanation='해설',source_page=7,answer='비공개 정답' WHERE id=?",q);
         mvc.perform(get("/api/questions/{id}/explanation",q).with(jwt().jwt(j->j.subject(USER.toString()))))
                 .andExpect(status().isOk()).andExpect(content().json("{\"explanation\":\"해설\",\"sourcePage\":7}"))
-                .andExpect(jsonPath("$",aMapWithSize(2)));
+                .andExpect(jsonPath("$",aMapWithSize(3))).andExpect(jsonPath("$.answer").value(nullValue()));
         categories().andExpect(status().isOk()).andExpect(jsonPath("$.categories",hasSize(1)));
+    }
+
+    @Test void explanationIncludesAnswerOnceUserHasAttemptedTheQuestion() throws Exception {
+        long q=question(category("AVAILABLE",1),"PREGEN");
+        jdbc.update("UPDATE question SET answer='정답' WHERE id=?",q);
+        attempt(q,USER,true,false,"2026-11-08T01:00:00Z");
+        mvc.perform(get("/api/questions/{id}/explanation",q).with(jwt().jwt(j->j.subject(USER.toString()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.answer").value("정답"));
+    }
+
+    @Test void explanationAnswerIgnoresOtherUsersAttempts() throws Exception {
+        long q=question(category("AVAILABLE",1),"PREGEN");
+        jdbc.update("UPDATE question SET answer='정답' WHERE id=?",q);
+        attempt(q,OTHER,true,false,"2026-11-08T01:00:00Z");
+        mvc.perform(get("/api/questions/{id}/explanation",q).with(jwt().jwt(j->j.subject(USER.toString()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.answer").value(nullValue()));
     }
 
     @Test void nullExplanationAndPageAreExplicitNulls() throws Exception {
         long q=question(category("AVAILABLE",1),"PREGEN");
         mvc.perform(get("/api/questions/{id}/explanation",q).with(jwt().jwt(j->j.subject(USER.toString()))))
-                .andExpect(status().isOk()).andExpect(jsonPath("$",aMapWithSize(2)))
-                .andExpect(jsonPath("$.explanation").value(nullValue())).andExpect(jsonPath("$.sourcePage").value(nullValue()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$",aMapWithSize(3)))
+                .andExpect(jsonPath("$.explanation").value(nullValue())).andExpect(jsonPath("$.sourcePage").value(nullValue()))
+                .andExpect(jsonPath("$.answer").value(nullValue()));
     }
 
     @Test void missingAndForeignQuestionsAre404() throws Exception {

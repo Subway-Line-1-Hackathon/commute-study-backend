@@ -65,25 +65,38 @@ class AnswerJudgeControllerTest {
 
 	@Test
 	void AI_판정은_200과_correct_reason() throws Exception {
-		when(answerJudgeService.judge(any(), any())).thenReturn(JudgeAnswerResponse.judged(true, "같은 뜻이에요."));
+		when(answerJudgeService.judge(any(), any())).thenReturn(JudgeAnswerResponse.judged(true, "같은 뜻이에요.", "대기"));
 
 		mvc.perform(post("/api/answers/judge").with(jwt()).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.correct").value(true))
 				.andExpect(jsonPath("$.reason").value("같은 뜻이에요."))
+				.andExpect(jsonPath("$.answer").value("대기"))
 				.andExpect(jsonPath("$.timeout").doesNotExist());
 		verify(answerJudgeService).judge(any(), argThat(r -> r.questionId() == 103L && r.answer().equals("대기열")));
 	}
 
 	@Test
-	void AI_실패도_200이고_correct는_null로_내려간다() throws Exception {
-		when(answerJudgeService.judge(any(), any())).thenReturn(JudgeAnswerResponse.timedOut());
+	void 정답_목록과_일치하면_200과_correct_answer() throws Exception {
+		when(answerJudgeService.judge(any(), any())).thenReturn(JudgeAnswerResponse.matched("대기열"));
+
+		mvc.perform(post("/api/answers/judge").with(jwt()).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.correct").value(true))
+				.andExpect(jsonPath("$.answer").value("대기열"))
+				.andExpect(jsonPath("$.reason").doesNotExist());
+	}
+
+	@Test
+	void AI_실패도_200이고_correct는_null로_내려가지만_answer는_내려간다() throws Exception {
+		when(answerJudgeService.judge(any(), any())).thenReturn(JudgeAnswerResponse.timedOut("대기열"));
 
 		mvc.perform(post("/api/answers/judge").with(jwt()).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.correct").value(org.hamcrest.Matchers.nullValue()))
 				.andExpect(jsonPath("$.correct").hasJsonPath())
 				.andExpect(jsonPath("$.timeout").value(true))
+				.andExpect(jsonPath("$.answer").value("대기열"))
 				.andExpect(jsonPath("$.reason").doesNotExist());
 	}
 

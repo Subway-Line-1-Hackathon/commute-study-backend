@@ -44,17 +44,22 @@ public class StudyReadRepository {
                 rs.getObject("last_studied",OffsetDateTime.class)),subjectId,userId,userId);
     }
 
+    /** answer는 풀기 전 노출을 막기 위해 본인이 이미 답한 문제에만 내려주고, 아니면 null이다(#73). */
     public Explanation explanation(long questionId, UUID userId) {
         return jdbc.query("""
-                SELECT q.explanation,q.source_page FROM public.question q
+                SELECT q.explanation,q.source_page,
+                    CASE WHEN EXISTS (SELECT 1 FROM public.attempt a WHERE a.question_id=q.id AND a.user_id=?)
+                        THEN q.answer ELSE NULL END AS answer
+                FROM public.question q
                 JOIN public.category c ON c.id=q.category_id
                 JOIN public.subject s ON s.id=c.subject_id
                 WHERE q.id=? AND s.user_id=?
-                """, (rs,n) -> new Explanation(rs.getString("explanation"),rs.getObject("source_page",Integer.class)),
-                questionId,userId).stream().findFirst().orElseThrow(() -> new ApiException(CommonErrorCode.NOT_FOUND));
+                """, (rs,n) -> new Explanation(rs.getString("explanation"),rs.getObject("source_page",Integer.class),
+                rs.getString("answer")),
+                userId,questionId,userId).stream().findFirst().orElseThrow(() -> new ApiException(CommonErrorCode.NOT_FOUND));
     }
 
     public record CategoryStats(long id,long materialId,String name,int pageStart,int pageEnd,String summary,String questionStatus,
                                 long total,long solved,long graded,long correct,OffsetDateTime lastStudiedAt) {}
-    public record Explanation(String explanation,Integer sourcePage) {}
+    public record Explanation(String explanation,Integer sourcePage,String answer) {}
 }

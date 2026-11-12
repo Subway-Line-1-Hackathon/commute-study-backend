@@ -39,6 +39,8 @@ public class AnswerJudgeController {
 			3. 다르면 AI가 판정해 `{correct, reason}` (최대 약 5초)
 			4. AI가 늦거나 실패하면 `{correct: null, timeout: true}`(200). 대표 정답을 보여주고 사용자가 맞음·틀림을 고르게 한 뒤,
 			   `POST /api/attempts`에 `correct`와 `selfJudged: true`로 저장한다
+
+			`answer`(대표 정답, question.answer)는 세 경우 모두 포함한다.
 			""")
 	@io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(
 			mediaType = "application/json", examples = @ExampleObject(value = """
@@ -47,13 +49,13 @@ public class AnswerJudgeController {
 	@ApiResponse(responseCode = "200", description = "판정 결과", content = @Content(
 			mediaType = "application/json", examples = {
 					@ExampleObject(name = "정답 목록과 일치", value = """
-							{"correct":true}
+							{"correct":true,"answer":"대기열"}
 							"""),
 					@ExampleObject(name = "AI 판정", value = """
-							{"correct":true,"reason":"큐를 뜻하는 다른 표현이에요."}
+							{"correct":true,"reason":"큐를 뜻하는 다른 표현이에요.","answer":"대기열"}
 							"""),
 					@ExampleObject(name = "AI 실패·시간 초과(자가 판정)", value = """
-							{"correct":null,"timeout":true}
+							{"correct":null,"timeout":true,"answer":"대기열"}
 							""")
 			}))
 	@ApiResponse(responseCode = "400", description = "VALIDATION_ERROR: 필수값 없음, 답 30자 초과, 단답이 아닌 문제",

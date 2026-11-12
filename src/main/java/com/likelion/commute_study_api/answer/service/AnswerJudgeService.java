@@ -59,17 +59,17 @@ public class AnswerJudgeService {
 
 		if (AnswerNormalizer.normalize(request.answer()).isEmpty()) {
 			log.info("[단답] 판정 questionId={} result=BLANK", question.id());
-			return JudgeAnswerResponse.blank();
+			return JudgeAnswerResponse.blank(question.answer());
 		}
 		List<String> acceptedAnswers = acceptedAnswers(question);
 		if (AnswerNormalizer.matchesAny(request.answer(), acceptedAnswers)) {
 			log.info("[단답] 판정 questionId={} result=MATCHED", question.id());
-			return JudgeAnswerResponse.matched();
+			return JudgeAnswerResponse.matched(question.answer());
 		}
 		if (acceptedAnswers.isEmpty()) {
 			// 정답 데이터가 없어 AI에도 보낼 수 없다(acceptedAnswers 1개 이상 필수). 사용자에게 맡긴다.
 			log.warn("[단답] 정답 목록이 비어 자가 판정으로 넘김 questionId={}", question.id());
-			return JudgeAnswerResponse.timedOut();
+			return JudgeAnswerResponse.timedOut(question.answer());
 		}
 		return judgeWithAi(question, acceptedAnswers, request.answer());
 	}
@@ -81,16 +81,16 @@ public class AnswerJudgeService {
 					question.explanation() == null ? "" : question.explanation(), answer));
 			log.info("[단답] 판정 questionId={} result=AI correct={} elapsedMs={}", question.id(), result.correct(),
 					System.currentTimeMillis() - start);
-			return JudgeAnswerResponse.judged(result.correct(), result.reason());
+			return JudgeAnswerResponse.judged(result.correct(), result.reason(), question.answer());
 		} catch (ApiException e) {
 			// AI_TIMEOUT·AI_UNAVAILABLE 등. AiHttpSupport가 원인을 이미 로그로 남겼다.
 			log.warn("[단답] AI 판정 실패, 자가 판정으로 넘김 questionId={} code={} elapsedMs={}", question.id(),
 					e.getErrorCode().getCode(), System.currentTimeMillis() - start);
-			return JudgeAnswerResponse.timedOut();
+			return JudgeAnswerResponse.timedOut(question.answer());
 		} catch (RuntimeException e) {
 			// 응답 파싱 실패 등 예상 못 한 오류도 사용자를 막지 않고 자가 판정으로 넘긴다.
 			log.error("[단답] AI 판정 중 예외, 자가 판정으로 넘김 questionId={}", question.id(), e);
-			return JudgeAnswerResponse.timedOut();
+			return JudgeAnswerResponse.timedOut(question.answer());
 		}
 	}
 
