@@ -200,7 +200,7 @@ class UserApiTest {
     private static final String SETTINGS = "/api/users/me/settings";
 
     @ParameterizedTest
-    @CsvSource({"10,REVIEW", "19,REVIEW", "20,CURRICULUM", "50,CURRICULUM", "120,CURRICULUM"})
+    @CsvSource({"10,REVIEW", "11,CURRICULUM", "50,CURRICULUM", "120,CURRICULUM"})
     void settingsSaveAndReadWithMode(int minutes, String mode) throws Exception {
         String bearer = token(USER, false);
         mvc.perform(put(SETTINGS).header("Authorization", bearer).contentType("application/json")
@@ -434,7 +434,7 @@ class UserApiTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"19,REVIEW", "20,CURRICULUM"})
+    @CsvSource({"10,REVIEW", "11,CURRICULUM"})
     void reusesStudyModeBoundary(int minutes, String mode) throws Exception {
         seed(USER, "동현", true, true);
         jdbc.update("UPDATE public.commute_profile SET one_way_min = ?, from_station = NULL, to_station = NULL", minutes);

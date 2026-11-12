@@ -246,7 +246,7 @@ class SessionServiceTest {
 
 	@Test
 	void REVIEW는_추가_생성_없이_오답과_푼_문제로_만든다() {
-		users.oneWayMin = 19;
+		users.oneWayMin = 10;
 		sessions.addUnsolved(7, "MC", 10);
 		sessions.addSolved(7, "MC", 3);
 		sessions.addWrong(7, "MC", true);
@@ -261,7 +261,7 @@ class SessionServiceTest {
 
 	@Test
 	void REVIEW인데_푼_문제가_없으면_세션_없이_noReviewItems() {
-		users.oneWayMin = 19;
+		users.oneWayMin = 10;
 		sessions.addUnsolved(7, "MC", 10);
 
 		CreateSessionResponse r = service.create(JWT, categories(List.of(7L), List.of("MC"), null));

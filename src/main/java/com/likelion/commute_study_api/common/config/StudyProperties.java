@@ -13,7 +13,7 @@ import lombok.Setter;
 @ConfigurationProperties(prefix = "study")
 public class StudyProperties {
 
-	private int curriculumMinMinutes = 20;
+	private int curriculumMinMinutes = 11;
 	private int summaryMinutes = 3;
 	private int maxQuestionsPerSession = 30;
 

@@ -48,7 +48,7 @@ public class SessionController {
 			'이어서 더 풀기'(`studyMinOverride`에 남은 시간, `skipSummary: true`)도 이 API를 쓴다.
 
 			- 문제 수: `min(30, floor((학습 시간 - 요약 3분) / 선택 유형 평균 시간))`. 요약은 CURRICULUM에서만 뺀다
-			- 학습 시간이 20분 미만이면 REVIEW(오답 → 이미 푼 문제, 요약 없음)
+			- 학습 시간이 11분 미만이면 REVIEW(오답 → 이미 푼 문제, 요약 없음)
 			- 문제가 모자라면 AI로 부족분을 만든다. **최대 약 60초** 걸릴 수 있으니 대기 화면을 보여준다
 			- 그래도 모자라면 `shortage`가 온다. REVIEW인데 푼 문제가 없으면 `noReviewItems: true`(세션 없음)
 			- O/X·객관식은 `answer`·`explanation`을 담고, 단답은 담지 않는다

@@ -60,7 +60,7 @@ user:
   nickname-max: 10
 
 study:
-  curriculum-min-minutes: 20
+  curriculum-min-minutes: 11
   summary-minutes: 3
   max-questions-per-session: 30
   minutes-per-question:
