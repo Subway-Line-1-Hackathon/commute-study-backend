@@ -133,7 +133,7 @@ class LegacyAuthApiTest {
                 .andExpect(jsonPath("$.fromStation").value("수원")).andExpect(jsonPath("$.toStation").value("서울"));
         mvc.perform(authenticated(get("/api/users/me"))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.nickname").value("변경닉네임"))
-                .andExpect(jsonPath("$.status").value("AUTHENTICATED")).andExpect(jsonPath("$.hasSubject").value(false));
+                .andExpect(jsonPath("$.status").value("ACTIVE")).andExpect(jsonPath("$.hasSubject").value(false));
         assertThat(jdbc.queryForObject("SELECT created_at FROM public.app_user WHERE id=?", java.time.OffsetDateTime.class, USER)).isEqualTo(created);
         assertThat(jdbc.queryForObject("SELECT nickname FROM public.app_user WHERE id=?", String.class, OTHER)).isEqualTo("다른사용자");
         mvc.perform(authenticated(put(NICKNAME)).contentType("application/json").content("{\"nickname\":false}"))

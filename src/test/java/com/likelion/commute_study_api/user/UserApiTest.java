@@ -158,13 +158,13 @@ class UserApiTest {
     }
 
     @Test
-    void subjectCreationCompletesSetupAndActivatesUser() throws Exception {
+    void settingsCompleteSetupAndActivateUserRegardlessOfSubject() throws Exception {
         String bearer = token(USER, false);
         mvc.perform(put(SETTINGS).header("Authorization", bearer).contentType("application/json")
                         .content("{\"nickname\":\"동현\",\"oneWayMin\":50}"))
                 .andExpect(status().isOk());
         mvc.perform(get("/api/users/me").header("Authorization", bearer))
-                .andExpect(jsonPath("$.status").value("AUTHENTICATED"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.hasSubject").value(false));
         mvc.perform(post("/api/subjects").header("Authorization", bearer).contentType("application/json")
                         .content("{\"name\":\"프로그래밍\"}"))
@@ -212,7 +212,7 @@ class UserApiTest {
                 .andExpect(jsonPath("$.mode").value(mode))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("\"fromStation\":null")));
         mvc.perform(get("/api/users/me").header("Authorization", bearer))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("AUTHENTICATED"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACTIVE"));
         jdbc.update("INSERT INTO public.subject(user_id, name) VALUES (?, '자료구조')", USER);
         mvc.perform(get("/api/users/me").header("Authorization", bearer))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACTIVE"));
@@ -407,11 +407,11 @@ class UserApiTest {
     @ParameterizedTest
     @CsvSource({"false,false,false", "false,false,true", "false,true,false", "false,true,true",
             "true,false,false", "true,false,true", "true,true,false", "true,true,true"})
-    void statusRequiresAllThreeConditions(boolean nickname, boolean commute, boolean subject) throws Exception {
+    void statusRequiresNicknameAndCommuteButNotSubject(boolean nickname, boolean commute, boolean subject) throws Exception {
         seed(USER, nickname ? "동현" : null, commute, subject);
         var result = mvc.perform(get("/api/users/me").header("Authorization", token(USER, false)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value(nickname && commute && subject ? "ACTIVE" : "AUTHENTICATED"))
+                .andExpect(jsonPath("$.status").value(nickname && commute ? "ACTIVE" : "AUTHENTICATED"))
                 .andExpect(jsonPath("$.hasSubject").value(subject));
         if (commute) {
             result.andExpect(jsonPath("$.settings.oneWayMin").value(50))

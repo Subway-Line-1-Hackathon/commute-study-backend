@@ -30,7 +30,7 @@ public class UserService {
                 user.oneWayMin(), user.fromStation(), user.toStation(), user.oneWayMin(),
                 StudyMode.of(user.oneWayMin(), studyProperties.getCurriculumMinMinutes()));
         boolean active = user.nickname() != null && !user.nickname().isBlank()
-                && settings != null && user.hasSubject();
+                && settings != null;
         return new UserResponse(user.userId(), user.nickname(),
                 active ? UserResponse.Status.ACTIVE : UserResponse.Status.AUTHENTICATED,
                 user.hasSubject(), settings);
