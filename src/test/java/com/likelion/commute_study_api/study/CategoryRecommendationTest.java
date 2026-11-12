@@ -34,7 +34,7 @@ class CategoryRecommendationTest {
     }
 
     CategoryItem item(long id,State state,String time) {
-        return new CategoryItem(id,"단원",1,2,0,null,time==null?null:OffsetDateTime.parse(time),state,
+        return new CategoryItem(id,1,"단원",1,2,null,0,null,time==null?null:OffsetDateTime.parse(time),state,
                 state==State.PREPARING?"PREPARING":"AVAILABLE");
     }
 }

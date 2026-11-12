@@ -57,6 +57,18 @@ class StudyReadApiTest {
                 .andExpect(jsonPath("$.recommendedId").value(nullValue()));
     }
 
+    @Test void categoryItemIncludesMaterialIdAndSummary() throws Exception {
+        long c=category("AVAILABLE",1);
+        jdbc.update("UPDATE category SET summary='요약' WHERE id=?",c);
+        categories().andExpect(jsonPath("$.categories[0].materialId").value(material))
+                .andExpect(jsonPath("$.categories[0].summary").value("요약"));
+    }
+
+    @Test void categorySummaryIsNullWhenNotSet() throws Exception {
+        category("AVAILABLE",1);
+        categories().andExpect(jsonPath("$.categories[0].summary").value(nullValue()));
+    }
+
     @Test void unstartedUsesCategoryOrderThenIdAndNoAttemptsMeansNullAccuracyAndTime() throws Exception {
         long late=category("AVAILABLE",5), first=category("AVAILABLE",1), tie=category("AVAILABLE",1);
         for(long c:List.of(late,first,tie)) question(c,"PREGEN");

@@ -33,13 +33,13 @@ public class StudyReadRepository {
                     JOIN owned_categories c ON c.id=q.category_id
                     WHERE a.user_id=? GROUP BY q.category_id
                 )
-                SELECT c.id,c.name,c.page_start,c.page_end,c.question_status,
+                SELECT c.id,c.material_id,c.name,c.page_start,c.page_end,c.summary,c.question_status,
                     COALESCE(q.total,0) AS total,COALESCE(a.solved,0) AS solved,
                     COALESCE(a.graded,0) AS graded,COALESCE(a.correct_count,0) AS correct_count,a.last_studied
                 FROM owned_categories c LEFT JOIN question_counts q ON q.category_id=c.id
                 LEFT JOIN answer_counts a ON a.category_id=c.id ORDER BY c."order",c.id
-                """, (rs,n) -> new CategoryStats(rs.getLong("id"),rs.getString("name"),
-                rs.getInt("page_start"),rs.getInt("page_end"),rs.getString("question_status"),
+                """, (rs,n) -> new CategoryStats(rs.getLong("id"),rs.getLong("material_id"),rs.getString("name"),
+                rs.getInt("page_start"),rs.getInt("page_end"),rs.getString("summary"),rs.getString("question_status"),
                 rs.getLong("total"),rs.getLong("solved"),rs.getLong("graded"),rs.getLong("correct_count"),
                 rs.getObject("last_studied",OffsetDateTime.class)),subjectId,userId,userId);
     }
@@ -54,7 +54,7 @@ public class StudyReadRepository {
                 questionId,userId).stream().findFirst().orElseThrow(() -> new ApiException(CommonErrorCode.NOT_FOUND));
     }
 
-    public record CategoryStats(long id,String name,int pageStart,int pageEnd,String questionStatus,
+    public record CategoryStats(long id,long materialId,String name,int pageStart,int pageEnd,String summary,String questionStatus,
                                 long total,long solved,long graded,long correct,OffsetDateTime lastStudiedAt) {}
     public record Explanation(String explanation,Integer sourcePage) {}
 }
