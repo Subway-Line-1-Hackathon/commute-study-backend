@@ -50,13 +50,41 @@ class WrongNoteApiTest {
         long resolved=note(category,USER,"RESOLVED",2,TIME);
         long tie=note(secondCategory,USER,"OPEN",7,TIME);
         list(subject,null).andExpect(status().isOk()).andExpect(jsonPath("$.items[*].questionId",contains((int)tie,(int)resolved,(int)old)))
-                .andExpect(jsonPath("$.items[0]",aMapWithSize(6))).andExpect(jsonPath("$.items[0].categoryId").value(secondCategory))
+                .andExpect(jsonPath("$.items[0]",aMapWithSize(12))).andExpect(jsonPath("$.items[0].categoryId").value(secondCategory))
+                .andExpect(jsonPath("$.items[0].categoryName").value("단원")).andExpect(jsonPath("$.items[0].type").value("OX"))
+                .andExpect(jsonPath("$.items[0].choices").value(nullValue())).andExpect(jsonPath("$.items[0].answer").value("O"))
+                .andExpect(jsonPath("$.items[0].sourcePage").value(nullValue())).andExpect(jsonPath("$.items[0].lastAnswer").value(nullValue()))
                 .andExpect(jsonPath("$.items[0].stem").value("문제" )).andExpect(jsonPath("$.items[0].wrongCount").value(7))
                 .andExpect(jsonPath("$.items[1].status").value("RESOLVED")).andExpect(jsonPath("$.items[2].status").value("OPEN"));
         var items=repository.list(subject,USER,null,100,50);
         assertThat(items.getFirst().lastWrongAt().toInstant()).isEqualTo(TIME.toInstant());
         assertThat(items.get(1).wrongCount()).isEqualTo(2);
     }
+    @Test void mcQuestionExposesChoicesAndSourcePageAndOxShortDoNot() throws Exception {
+        jdbc.update("INSERT INTO question(category_id,type,difficulty,stem,choices,answer,source_page,origin) VALUES (?,'MC',2,'문제','[\"1\",\"2\"]','2',12,'PREGEN')",category);
+        long mc=max("question");
+        jdbc.update("INSERT INTO wrong_note VALUES (?,?,1,'OPEN',?)",USER,mc,TIME);
+        list(subject,null).andExpect(jsonPath("$.items[0].choices",contains("1","2")))
+                .andExpect(jsonPath("$.items[0].sourcePage").value(12));
+    }
+
+    @Test void lastAnswerIsMostRecentWrongAttemptAndIgnoresCorrectAndOtherUsers() throws Exception {
+        long q=note(category,USER,"OPEN",1,TIME);
+        wrongAttempt(q,USER,"X",TIME.minusHours(2));
+        wrongAttempt(q,USER,"Y",TIME.minusHours(1));
+        correctAttempt(q,USER,"O",TIME);
+        wrongAttempt(q,OTHER,"Z",TIME);
+        list(subject,null).andExpect(jsonPath("$.items[0].lastAnswer").value("Y"));
+    }
+    void wrongAttempt(long q,UUID user,String answer,OffsetDateTime at) { attempt(q,user,answer,false,at); }
+    void correctAttempt(long q,UUID user,String answer,OffsetDateTime at) { attempt(q,user,answer,true,at); }
+    void attempt(long q,UUID user,String answer,boolean correct,OffsetDateTime at) {
+        jdbc.update("INSERT INTO session(user_id,mode,source) VALUES (?,'REVIEW','categories')",user); long session=max("session");
+        jdbc.update("INSERT INTO session_question VALUES (?,?,1)",session,q);
+        jdbc.update("INSERT INTO attempt(user_id,question_id,session_id,answer,correct,answered_at) VALUES (?,?,?,?,?,?)",
+                user,q,session,answer,correct,at);
+    }
+
     @Test void noNotesAndEmptyCategoryReturnEmptyItems() throws Exception {
         list(subject,null).andExpect(status().isOk()).andExpect(content().json("{\"items\":[]}"));
         note(category,USER,"OPEN",1,TIME);
