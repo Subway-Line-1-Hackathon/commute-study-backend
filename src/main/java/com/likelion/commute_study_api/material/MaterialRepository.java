@@ -2,6 +2,8 @@ package com.likelion.commute_study_api.material;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 import com.likelion.commute_study_api.ai.material.MaterialProcessResponse;
 import com.likelion.commute_study_api.common.exception.ApiException;
@@ -29,6 +31,16 @@ public class MaterialRepository {
             return ps;
         }, key);
         return java.util.Objects.requireNonNull(key.getKey()).longValue();
+    }
+
+    public List<MaterialSummary> listByUser(UUID userId) {
+        return jdbc.query("""
+                SELECT m.id, m.subject_id, m.file_name, m.status, m.created_at
+                FROM public.material m JOIN public.subject s ON s.id = m.subject_id
+                WHERE s.user_id = ? ORDER BY m.created_at DESC
+                """, (rs, n) -> new MaterialSummary(rs.getLong("id"), rs.getLong("subject_id"),
+                rs.getString("file_name"), rs.getString("status"), rs.getObject("created_at", OffsetDateTime.class)),
+                userId);
     }
 
     public Material owned(long id, UUID userId) {
@@ -125,5 +137,6 @@ public class MaterialRepository {
 
     public record Material(long id, long subjectId, String reference, String name, String type, String kind,
                            String status, String error) {}
+    public record MaterialSummary(long id, long subjectId, String fileName, String status, OffsetDateTime createdAt) {}
 }
 

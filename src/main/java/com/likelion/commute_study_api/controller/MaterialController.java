@@ -46,6 +46,15 @@ public class MaterialController {
         return service.upload(jwt, id, files, kind);
     }
 
+    @Operation(summary = "내 자료 목록 조회", description = "계정의 모든 자료를 `createdAt` 내림차순으로 반환합니다. 과목과 무관하게 본인 자료만 조회합니다.")
+    @ApiResponse(responseCode = "200", description = "자료 목록", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = """
+            {"materials":[{"id":9,"subjectId":2,"fileName":"강의.pdf","status":"READY","createdAt":"2026-11-08T10:30:00+09:00"},{"id":8,"subjectId":2,"fileName":"1강.pptx","status":"PROCESSING","createdAt":"2026-11-07T09:00:00+09:00"}]}
+            """)))
+    @GetMapping("/api/materials")
+    public MaterialService.MaterialList list(@AuthenticationPrincipal Jwt jwt) {
+        return service.list(jwt);
+    }
+
     @Operation(summary = "내 자료 처리 상태 조회", description = """
             업로드 후 몇 초 간격으로 폴링한다. `UPLOADED` → `PROCESSING` → `READY` 또는 `FAILED`.
             `FAILED`일 때만 `error`에 사유(AI 서버 메시지)가 온다. 보관 기간이 지나면 `EXPIRED`.""")

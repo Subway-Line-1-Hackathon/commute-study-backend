@@ -29,6 +29,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -214,6 +215,38 @@ class MaterialPipelineTest {
             mvc.perform(get("/api/materials/{id}/status",target).with(jwt().jwt(j -> j.subject(OTHER.toString())))).andExpect(status().isNotFound());
             mvc.perform(post("/api/materials/{id}/retry",target).with(jwt().jwt(j -> j.subject(OTHER.toString())))).andExpect(status().isNotFound());
         }
+    }
+
+    @Test
+    void listReturnsOwnMaterialsNewestFirstAndExcludesOtherUsers() throws Exception {
+        jdbc.update("INSERT INTO app_user(id) VALUES (?)", OTHER);
+        jdbc.update("INSERT INTO subject(user_id,name) VALUES (?, '영어')", OTHER);
+        long otherSubject = jdbc.queryForObject("SELECT id FROM subject WHERE user_id=?", Long.class, OTHER);
+        long older = insertMaterial(subject, "1강.pdf", "READY", "2026-11-07T09:00:00+09:00");
+        long newer = insertMaterial(subject, "2강.pptx", "FAILED", "2026-11-08T09:00:00+09:00");
+        insertMaterial(otherSubject, "남의자료.pdf", "READY", "2026-11-09T09:00:00+09:00");
+
+        mvc.perform(get("/api/materials").with(jwt().jwt(j -> j.subject(USER.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.materials", hasSize(2)))
+                .andExpect(jsonPath("$.materials[0].id").value(newer))
+                .andExpect(jsonPath("$.materials[0].subjectId").value(subject))
+                .andExpect(jsonPath("$.materials[0].fileName").value("2강.pptx"))
+                .andExpect(jsonPath("$.materials[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.materials[1].id").value(older));
+    }
+
+    @Test
+    void listRequiresAuthenticationAndReturnsEmptyForUserWithNoMaterials() throws Exception {
+        mvc.perform(get("/api/materials")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/materials").with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.materials", hasSize(0)));
+    }
+
+    long insertMaterial(long subjectId, String fileName, String status, String createdAt) {
+        jdbc.update("INSERT INTO material(subject_id,file_url,file_name,file_type,kind,size,status,created_at) VALUES (?,'private/ref.pdf',?,'PDF','LECTURE',1,?,?)",
+                subjectId, fileName, status, java.time.OffsetDateTime.parse(createdAt));
+        return jdbc.queryForObject("SELECT max(id) FROM material", Long.class);
     }
 
     @Test
