@@ -58,6 +58,9 @@ final class QuestionTestFakes {
 		}
 
 		@Override
+		public boolean lockActiveMaterialForCategory(long categoryId) { return categories.containsKey(categoryId); }
+
+		@Override
 		public Optional<CategoryTarget> findCategory(long categoryId) {
 			return Optional.ofNullable(categories.get(categoryId));
 		}

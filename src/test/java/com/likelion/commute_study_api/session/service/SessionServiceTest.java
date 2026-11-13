@@ -389,6 +389,9 @@ class SessionServiceTest {
 		}
 
 		@Override
+		public boolean lockActiveMaterialsForSelection(UUID userId, List<Long> questionIds, List<Long> categoryIds) { return true; }
+
+		@Override
 		public int deleteReadySessions(UUID userId) {
 			deleteReadyCalls++;
 			return 0;

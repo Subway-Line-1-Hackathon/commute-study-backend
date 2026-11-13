@@ -16,7 +16,7 @@ public class MaterialRetentionRepository {
     public List<UUID> usersWithRetainedMaterials() {
         return jdbc.queryForList("""
                 SELECT DISTINCT s.user_id FROM public.material m JOIN public.subject s ON s.id=m.subject_id
-                WHERE m.status IN ('READY','FAILED')
+                WHERE m.deleted_at IS NULL AND m.status IN ('READY','FAILED')
                 """, UUID.class);
     }
 
@@ -30,7 +30,7 @@ public class MaterialRetentionRepository {
         return jdbc.query("""
                 SELECT m.id, m.created_at, m.expires_at, m.cleanup_pending
                 FROM public.material m JOIN public.subject s ON s.id=m.subject_id
-                WHERE s.user_id=? AND m.status IN ('READY','FAILED') ORDER BY m.created_at ASC, m.id ASC
+                WHERE s.user_id=? AND m.deleted_at IS NULL AND m.status IN ('READY','FAILED') ORDER BY m.created_at ASC, m.id ASC
                 """, (rs, n) -> new Candidate(rs.getLong("id"), rs.getTimestamp("created_at").toInstant(),
                 rs.getTimestamp("expires_at") == null ? null : rs.getTimestamp("expires_at").toInstant(),
                 rs.getBoolean("cleanup_pending")), userId);
@@ -40,7 +40,7 @@ public class MaterialRetentionRepository {
     public boolean reserve(long id, UUID userId) {
         return jdbc.update("""
                 UPDATE public.material SET cleanup_pending=true
-                WHERE id=? AND status IN ('READY','FAILED')
+                WHERE id=? AND deleted_at IS NULL AND status IN ('READY','FAILED')
                   AND subject_id IN (SELECT id FROM public.subject WHERE user_id=?)
                 """, id, userId) == 1;
     }
@@ -49,7 +49,7 @@ public class MaterialRetentionRepository {
         int updated = jdbc.update("""
                 UPDATE public.material SET status='EXPIRED', file_url='', cleanup_pending=false,
                     processing_started_at=NULL, processing_token=NULL
-                WHERE id=? AND cleanup_pending=true AND status IN ('READY','FAILED')
+                WHERE id=? AND deleted_at IS NULL AND cleanup_pending=true AND status IN ('READY','FAILED')
                   AND subject_id IN (SELECT id FROM public.subject WHERE user_id=?)
                 """, id, userId);
         if (updated == 1) jdbc.update("UPDATE public.material_file SET file_url='' WHERE material_id=?", id);
@@ -67,7 +67,7 @@ public class MaterialRetentionRepository {
         return jdbc.update("""
                 UPDATE public.material SET status='FAILED', error_message=?,
                     processing_started_at=NULL, processing_token=NULL
-                WHERE id=? AND status='PROCESSING' AND processing_started_at <= ? AND cleanup_pending=false
+                WHERE id=? AND deleted_at IS NULL AND status='PROCESSING' AND processing_started_at <= ? AND cleanup_pending=false
                 """, "처리 시간이 초과되었습니다. 다시 시도해주세요.", id, Timestamp.from(cutoff)) == 1;
     }
 

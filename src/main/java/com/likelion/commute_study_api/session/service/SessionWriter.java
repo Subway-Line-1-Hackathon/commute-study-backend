@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.likelion.commute_study_api.common.study.StudyMode;
+import com.likelion.commute_study_api.common.exception.ApiException;
+import com.likelion.commute_study_api.common.exception.CommonErrorCode;
 import com.likelion.commute_study_api.session.repository.SessionRepository;
 import com.likelion.commute_study_api.session.dto.SessionSource;
 
@@ -27,6 +29,9 @@ public class SessionWriter {
 	@Transactional
 	public long save(UUID userId, List<Long> categoryIds, List<String> questionTypes, int difficulty, int studyMin,
 			StudyMode mode, SessionSource source, List<Long> questionIds) {
+		if (!sessionRepository.lockActiveMaterialsForSelection(userId, questionIds, categoryIds)) {
+			throw new ApiException(CommonErrorCode.STATE_CONFLICT, "선택한 자료가 삭제되어 세션을 다시 만들어야 합니다.");
+		}
 		sessionRepository.deleteReadySessions(userId);
 		long sessionId = sessionRepository.insertSession(userId, categoryIds, questionTypes, difficulty, studyMin,
 				mode.name(), source);

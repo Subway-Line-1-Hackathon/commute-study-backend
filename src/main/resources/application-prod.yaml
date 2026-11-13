@@ -1,3 +1,7 @@
 spring:
   jpa:
     show-sql: false
+
+# Process only explicitly deleted material objects in production; local default remains off.
+material:
+  deletion-cleanup-enabled: ${MATERIAL_DELETION_CLEANUP_ENABLED:true}

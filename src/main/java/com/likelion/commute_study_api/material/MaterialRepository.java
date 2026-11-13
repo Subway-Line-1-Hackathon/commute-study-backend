@@ -37,7 +37,7 @@ public class MaterialRepository {
         return jdbc.query("""
                 SELECT m.id, m.subject_id, m.file_name, m.status, m.created_at
                 FROM public.material m JOIN public.subject s ON s.id = m.subject_id
-                WHERE s.user_id = ? ORDER BY m.created_at DESC
+                WHERE s.user_id = ? AND m.deleted_at IS NULL ORDER BY m.created_at DESC
                 """, (rs, n) -> new MaterialSummary(rs.getLong("id"), rs.getLong("subject_id"),
                 rs.getString("file_name"), rs.getString("status"), rs.getObject("created_at", OffsetDateTime.class)),
                 userId);
@@ -46,7 +46,7 @@ public class MaterialRepository {
     public Material owned(long id, UUID userId) {
         return jdbc.query("""
                 SELECT m.* FROM public.material m JOIN public.subject s ON s.id = m.subject_id
-                WHERE m.id = ? AND s.user_id = ?
+                WHERE m.id = ? AND s.user_id = ? AND m.deleted_at IS NULL
                 """, this::map, id, userId).stream().findFirst().orElseThrow(() -> new ApiException(CommonErrorCode.NOT_FOUND));
     }
 
@@ -65,6 +65,16 @@ public class MaterialRepository {
                 String.class, material.id());
         if (references.isEmpty() || references.size() > 20) throw new IllegalStateException("Invalid image file references");
         return references;
+    }
+
+    /** Capture every persisted original reference, including legacy/mixed image rows. */
+    public List<String> deletionReferences(Material material) {
+        var references = new java.util.LinkedHashSet<String>();
+        if (material.reference() != null && !material.reference().isBlank()) references.add(material.reference());
+        for (String ref : jdbc.queryForList("SELECT file_url FROM public.material_file WHERE material_id=?", String.class, material.id())) {
+            if (ref != null && !ref.isBlank()) references.add(ref);
+        }
+        return List.copyOf(references);
     }
 
     /**
@@ -91,7 +101,7 @@ public class MaterialRepository {
         return jdbc.update("""
                 UPDATE public.material SET status = 'PROCESSING', error_message = NULL,
                     processing_started_at = CURRENT_TIMESTAMP, processing_token = ?
-                WHERE id = ? AND status = CAST(? AS material_status) AND expires_at > CURRENT_TIMESTAMP AND cleanup_pending = false
+                WHERE id = ? AND status = CAST(? AS material_status) AND expires_at > CURRENT_TIMESTAMP AND cleanup_pending = false AND deleted_at IS NULL
                 """, token, id, expected) == 1;
     }
 
@@ -102,7 +112,7 @@ public class MaterialRepository {
     public boolean fail(long id, UUID token, String message) {
         return jdbc.update("""
                 UPDATE public.material SET status = 'FAILED', error_message = ?, processing_started_at = NULL, processing_token = NULL
-                WHERE id = ? AND cleanup_pending = false
+                WHERE id = ? AND cleanup_pending = false AND deleted_at IS NULL
                   AND (status = 'UPLOADED' OR (status = 'PROCESSING' AND processing_token = ?))
                 """, message, id, token) == 1;
     }
@@ -112,7 +122,7 @@ public class MaterialRepository {
         if (jdbc.update("""
                 UPDATE public.material SET status = 'READY', page_count = ?, error_message = NULL,
                     processing_started_at = NULL, processing_token = NULL
-                WHERE id = ? AND status = 'PROCESSING' AND processing_token = ? AND cleanup_pending = false
+                WHERE id = ? AND status = 'PROCESSING' AND processing_token = ? AND cleanup_pending = false AND deleted_at IS NULL
                 """, result.pageCount(), id, token) != 1) return false;
         long subjectId = get(id).subjectId();
         for (var page : result.pages())

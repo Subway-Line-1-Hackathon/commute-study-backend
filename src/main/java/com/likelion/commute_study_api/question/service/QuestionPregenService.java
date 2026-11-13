@@ -117,6 +117,7 @@ public class QuestionPregenService {
 	}
 
 	private CompletableFuture<Void> runRound(CategoryTarget category, List<AiPage> pages, int round) {
+		if (repository.findCategory(category.id()).isEmpty()) return CompletableFuture.completedFuture(null);
 		List<TypeRequest> missing = missingRequests(category.id());
 		if (missing.isEmpty()) {
 			repository.markAvailable(category.id());
