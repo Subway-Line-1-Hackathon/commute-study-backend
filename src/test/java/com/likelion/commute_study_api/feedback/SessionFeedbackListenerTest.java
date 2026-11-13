@@ -1,6 +1,7 @@
 package com.likelion.commute_study_api.feedback;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -8,6 +9,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
@@ -37,6 +40,9 @@ class SessionFeedbackListenerTest {
 
 		final List<Long> calls = new CopyOnWriteArrayList<>();
 		final List<String> threads = new CopyOnWriteArrayList<>();
+		final List<Preparation> preparations = new CopyOnWriteArrayList<>();
+		final List<Long> dispatchFailures = new CopyOnWriteArrayList<>();
+		final List<String> lifecycle = new CopyOnWriteArrayList<>();
 		final CountDownLatch started = new CountDownLatch(1);
 		final CountDownLatch release = new CountDownLatch(1);
 		volatile boolean block;
@@ -46,7 +52,19 @@ class SessionFeedbackListenerTest {
 		}
 
 		@Override
+		public void prepare(long sessionId, String reason) {
+			preparations.add(new Preparation(sessionId, reason));
+			lifecycle.add("prepare");
+		}
+
+		@Override
+		public void failDispatch(long sessionId) {
+			dispatchFailures.add(sessionId);
+		}
+
+		@Override
 		public Outcome generate(long sessionId) {
+			lifecycle.add("generate");
 			calls.add(sessionId);
 			threads.add(Thread.currentThread().getName());
 			started.countDown();
@@ -61,6 +79,9 @@ class SessionFeedbackListenerTest {
 		}
 	}
 
+	record Preparation(long sessionId, String reason) {
+	}
+
 	private static SessionFinishedEvent event(String status, String reason) {
 		return new SessionFinishedEvent(1L, USER, status, reason);
 	}
@@ -70,14 +91,14 @@ class SessionFeedbackListenerTest {
 	@Test
 	void 모두_풀어_COMPLETED면_부른다() {
 		RecordingService service = new RecordingService();
-		new SessionFeedbackListener(service).onSessionFinished(event("COMPLETED", null));
+		new SessionFeedbackListener(service, Runnable::run).onSessionFinished(event("COMPLETED", null));
 		assertEquals(List.of(1L), service.calls);
 	}
 
 	@Test
 	void 그만하기와_도착은_부른다() {
 		RecordingService service = new RecordingService();
-		SessionFeedbackListener listener = new SessionFeedbackListener(service);
+		SessionFeedbackListener listener = new SessionFeedbackListener(service, Runnable::run);
 
 		listener.onSessionFinished(event("ENDED", "QUIT"));
 		listener.onSessionFinished(event("ENDED", "ARRIVED"));
@@ -88,7 +109,7 @@ class SessionFeedbackListenerTest {
 	@Test
 	void 새로_시작과_다음_날_자동_종료는_부르지_않는다() {
 		RecordingService service = new RecordingService();
-		SessionFeedbackListener listener = new SessionFeedbackListener(service);
+		SessionFeedbackListener listener = new SessionFeedbackListener(service, Runnable::run);
 
 		listener.onSessionFinished(event("ENDED", "NEW_START"));
 		listener.onSessionFinished(event("ENDED", "NEXT_DAY"));
@@ -96,10 +117,41 @@ class SessionFeedbackListenerTest {
 		assertTrue(service.calls.isEmpty());
 	}
 
+	@Test
+	void 생략_사유도_커밋_전_준비에_전달한다() {
+		RecordingService service = new RecordingService();
+		SessionFeedbackListener listener = new SessionFeedbackListener(service, Runnable::run);
+
+		listener.prepareFeedback(event("ENDED", "NEW_START"));
+		listener.prepareFeedback(event("ENDED", "NEXT_DAY"));
+
+		assertEquals(List.of(new Preparation(1L, "NEW_START"), new Preparation(1L, "NEXT_DAY")),
+				service.preparations);
+		assertTrue(service.calls.isEmpty());
+	}
+
+	@Test
+	void 실행기가_거절하면_실패를_기록하고_종료_요청에는_던지지_않는다() {
+		RecordingService service = new RecordingService();
+		Executor rejecting = task -> { throw new RejectedExecutionException("queue full"); };
+		SessionFeedbackListener listener = new SessionFeedbackListener(service, rejecting);
+
+		assertDoesNotThrow(() -> listener.onSessionFinished(event("ENDED", "ARRIVED")));
+
+		assertEquals(List.of(1L), service.dispatchFailures);
+		assertTrue(service.calls.isEmpty());
+	}
+
 	// ---- 커밋 후 비동기 실행 (실제 Spring 프록시) ----
 
 	/** DB 없이 트랜잭션 동기화(커밋 후 콜백)만 동작시키는 트랜잭션 매니저. */
 	static class NoOpTransactionManager extends AbstractPlatformTransactionManager {
+
+		private final List<String> lifecycle;
+
+		NoOpTransactionManager(List<String> lifecycle) {
+			this.lifecycle = lifecycle;
+		}
 
 		@Override
 		protected Object doGetTransaction() {
@@ -112,6 +164,7 @@ class SessionFeedbackListenerTest {
 
 		@Override
 		protected void doCommit(DefaultTransactionStatus status) {
+			lifecycle.add("commit");
 		}
 
 		@Override
@@ -130,8 +183,8 @@ class SessionFeedbackListenerTest {
 		}
 
 		@Bean
-		PlatformTransactionManager transactionManager() {
-			return new NoOpTransactionManager();
+		PlatformTransactionManager transactionManager(RecordingService service) {
+			return new NoOpTransactionManager(service.lifecycle);
 		}
 	}
 
@@ -161,6 +214,46 @@ class SessionFeedbackListenerTest {
 			assertTrue(elapsedMs < 1000, "종료 요청이 피드백을 기다렸다: " + elapsedMs + "ms");
 			assertEquals(1, service.release.getCount()); // 피드백은 아직 진행 중
 			assertTrue(service.threads.get(0).startsWith("feedback-"), service.threads.get(0));
+			assertEquals(List.of(new Preparation(1L, "ARRIVED")), service.preparations);
+			assertEquals(List.of("prepare", "commit", "generate"), service.lifecycle);
+		}
+
+		@Test
+		void 준비는_이벤트_발행_즉시가_아니라_커밋_직전에_한다() {
+			tx.executeWithoutResult(status -> {
+				context.publishEvent(event("ENDED", "NEW_START"));
+				assertTrue(service.preparations.isEmpty());
+				assertTrue(service.calls.isEmpty());
+			});
+
+			assertEquals(List.of(new Preparation(1L, "NEW_START")), service.preparations);
+			assertEquals(List.of("prepare", "commit"), service.lifecycle);
+			assertTrue(service.calls.isEmpty());
+		}
+
+		@Test
+		void 실제_피드백_대기열이_가득_차도_커밋은_성공하고_실패를_기록한다() {
+			Executor executor = context.getBean(FeedbackAsyncConfig.FEEDBACK_EXECUTOR, Executor.class);
+			CountDownLatch release = new CountDownLatch(1);
+			Runnable blocking = () -> {
+				try {
+					release.await(5, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			};
+			try {
+				for (int i = 0; i < 52; i++) executor.execute(blocking);
+
+				assertDoesNotThrow(() -> tx.executeWithoutResult(
+						status -> context.publishEvent(event("ENDED", "ARRIVED"))));
+
+				assertEquals(List.of(1L), service.dispatchFailures);
+				assertEquals(List.of("prepare", "commit"), service.lifecycle);
+				assertTrue(service.calls.isEmpty());
+			} finally {
+				release.countDown();
+			}
 		}
 
 		@Test
@@ -171,6 +264,8 @@ class SessionFeedbackListenerTest {
 			});
 
 			assertFalse(service.started.await(500, TimeUnit.MILLISECONDS));
+			assertTrue(service.preparations.isEmpty());
+			assertTrue(service.dispatchFailures.isEmpty());
 		}
 
 		@Test
@@ -179,6 +274,8 @@ class SessionFeedbackListenerTest {
 			context.publishEvent(event("ENDED", "ARRIVED"));
 
 			assertFalse(service.started.await(500, TimeUnit.MILLISECONDS));
+			assertTrue(service.preparations.isEmpty());
+			assertTrue(service.dispatchFailures.isEmpty());
 		}
 	}
 }

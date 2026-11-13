@@ -12,11 +12,19 @@ public class SubjectRequestDeserializer extends ValueDeserializer<SubjectRequest
     public SubjectRequest deserialize(JsonParser parser, DeserializationContext context) {
         JsonNode body = context.readTree(parser);
         if (!body.isObject()) return context.reportInputMismatch(SubjectRequest.class, "JSON object required");
-        JsonNode name = body.get("name");
+        String name = readName(body.get("name"), context);
+        LocalDate examDate = readExamDate(body.get("examDate"), context);
+        return new SubjectRequest(name, examDate);
+    }
+
+    static String readName(JsonNode name, DeserializationContext context) {
         if (name != null && !name.isNull() && !name.isString()) {
             return context.reportInputMismatch(SubjectRequest.class, "name must be a string");
         }
-        JsonNode date = body.get("examDate");
+        return name == null || name.isNull() ? null : name.stringValue();
+    }
+
+    static LocalDate readExamDate(JsonNode date, DeserializationContext context) {
         LocalDate examDate = null;
         if (date != null && !date.isNull()) {
             if (!date.isString() || !date.stringValue().matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) {
@@ -31,7 +39,7 @@ public class SubjectRequestDeserializer extends ValueDeserializer<SubjectRequest
                 return context.reportInputMismatch(SubjectRequest.class, "examDate must be a valid date");
             }
         }
-        return new SubjectRequest(name == null || name.isNull() ? null : name.stringValue(), examDate);
+        return examDate;
     }
 }
 

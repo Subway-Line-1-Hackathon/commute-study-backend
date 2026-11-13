@@ -7,6 +7,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.likelion.commute_study_api.common.auth.CurrentUser;
+import com.likelion.commute_study_api.common.exception.ApiException;
+import com.likelion.commute_study_api.common.exception.CommonErrorCode;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -43,6 +45,22 @@ public class SubjectService {
         }).toList());
     }
 
+    @Transactional
+    public UpdatedSubject update(Jwt jwt, long subjectId, SubjectPatchRequest request) {
+        var userId = currentUser.authenticatedId(jwt);
+        var subject = subjects.findOwnedForUpdate(subjectId, userId)
+                .orElseThrow(() -> new ApiException(CommonErrorCode.NOT_FOUND));
+        String name = request.nameProvided() ? request.name() : subject.name();
+        LocalDate examDate = request.examDateProvided() ? request.examDate() : subject.examDate();
+        if (request.nameProvided() || request.examDateProvided()) {
+            subjects.updateOwned(subjectId, userId, name, examDate);
+        }
+        LocalDate today = LocalDate.now(clock);
+        Long dDay = examDate == null || examDate.isBefore(today) ? null : ChronoUnit.DAYS.between(today, examDate);
+        return new UpdatedSubject(subjectId, name, examDate, dDay);
+    }
+
+    public record UpdatedSubject(long id, String name, LocalDate examDate, Long dDay) {}
     public record CreatedSubject(long subjectId) {}
     public record SubjectList(List<SubjectItem> subjects) {}
     public record SubjectItem(long id, String name,

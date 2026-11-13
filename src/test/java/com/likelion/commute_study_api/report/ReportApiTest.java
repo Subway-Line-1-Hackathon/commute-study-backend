@@ -93,6 +93,91 @@ class ReportApiTest {
         report(secondSubject,"scope=session&sessionId="+s).andExpect(jsonPath("$.today.solved").value(1))
                 .andExpect(jsonPath("$.today.minutes").value(35)).andExpect(jsonPath("$.today.wrong").value(1));
     }
+    @Test void sessionEndpointAggregatesEverySubjectAndPreservesLegacyTodayFields() throws Exception {
+        long s=session(USER,"2026-11-08T00:00:00Z","REVIEW");
+        jdbc.update("UPDATE session SET ended_at=? WHERE id=?",time("2026-11-08T02:00:00Z"),s);
+        answer(s,question,USER,true,true,"2026-11-08T00:01:00Z");
+        answer(s,question(category(secondSubject)),USER,false,false,"2026-11-08T00:10:00Z");
+        answer(s,question(category),USER,true,false,"2026-11-08T00:15:00Z");
+        answer(s,question(category),USER,null,false,"2026-11-08T00:24:59Z");
+
+        sessionReport(s).andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value(s))
+                .andExpect(jsonPath("$.today.answered").value(4))
+                .andExpect(jsonPath("$.today.correct").value(2))
+                .andExpect(jsonPath("$.today.accuracy",closeTo(2.0/3,0.000001)))
+                .andExpect(jsonPath("$.today.minutes").value(24))
+                .andExpect(jsonPath("$.today.solved").value(4))
+                .andExpect(jsonPath("$.today.wrong").value(1));
+        // The old endpoint remains filtered to its subject and keeps its original response shape.
+        report(subject,"scope=session&sessionId="+s).andExpect(status().isOk())
+                .andExpect(jsonPath("$",aMapWithSize(2)))
+                .andExpect(jsonPath("$.today",aMapWithSize(4)))
+                .andExpect(jsonPath("$.today.solved").value(3))
+                .andExpect(jsonPath("$.today.wrong").value(0))
+                .andExpect(jsonPath("$.today.accuracy").value(1.0))
+                .andExpect(jsonPath("$.today.answered").doesNotExist())
+                .andExpect(jsonPath("$.feedbackStatus").doesNotExist());
+    }
+    @Test void sessionEndpointExcludesOtherUsersOtherSessionsAndUnlinkedAttempts() throws Exception {
+        long s=session(USER,"2026-11-08T00:00:00Z","CURRICULUM");
+        answer(s,question,USER,true,true,"2026-11-08T00:01:00Z");
+        answer(s,question(category),OTHER,false,false,"2026-11-08T01:00:00Z");
+        jdbc.update("INSERT INTO attempt(user_id,session_id,question_id,correct) VALUES (?,?,?,false)",
+                USER,s,question(category));
+        answer(session(USER,null,"REVIEW"),question(category(secondSubject)),USER,false,false,"2026-11-08T02:00:00Z");
+        answer(session(OTHER,null,"REVIEW"),question,USER,false,false,"2026-11-08T03:00:00Z");
+
+        sessionReport(s).andExpect(status().isOk())
+                .andExpect(jsonPath("$.today.answered").value(1))
+                .andExpect(jsonPath("$.today.correct").value(1))
+                .andExpect(jsonPath("$.today.accuracy").value(1.0))
+                .andExpect(jsonPath("$.today.minutes").value(1))
+                .andExpect(jsonPath("$.today.wrong").value(0));
+    }
+    @Test void sessionEndpointSupportsEmptySessionsAndPendingJudgments() throws Exception {
+        long s=session(USER,null,"CURRICULUM");
+        // A session does not need a subject membership or any answers to be owned and readable.
+        sessionReport(s).andExpect(status().isOk())
+                .andExpect(jsonPath("$.today.answered").value(0))
+                .andExpect(jsonPath("$.today.correct").value(0))
+                .andExpect(jsonPath("$.today.accuracy").value(nullValue()))
+                .andExpect(jsonPath("$.today.minutes").value(0))
+                .andExpect(jsonPath("$.feedback").value(nullValue()))
+                .andExpect(jsonPath("$.feedbackStatus").value("PENDING"));
+        answer(s,question,USER,null,false,"2026-11-08T00:01:00Z");
+        sessionReport(s).andExpect(jsonPath("$.today.answered").value(1))
+                .andExpect(jsonPath("$.today.correct").value(0))
+                .andExpect(jsonPath("$.today.accuracy").value(nullValue()))
+                .andExpect(jsonPath("$.today.wrong").value(0));
+    }
+    @ParameterizedTest @ValueSource(strings={"PENDING","READY","SKIPPED","FAILED"})
+    void sessionEndpointReadsPersistedFeedbackStatus(String feedbackStatus) throws Exception {
+        long s=session(USER,null,"CURRICULUM");
+        String feedback="READY".equals(feedbackStatus)?"저장된 피드백":null;
+        jdbc.update("UPDATE session SET feedback_status=?,feedback=? WHERE id=?",feedbackStatus,feedback,s);
+
+        sessionReport(s).andExpect(status().isOk())
+                .andExpect(jsonPath("$.feedbackStatus").value(feedbackStatus))
+                .andExpect(jsonPath("$.feedback").value(feedback==null?nullValue():is(feedback)));
+        verifyNoInteractions(ai);
+    }
+    @ParameterizedTest @ValueSource(strings={"READY","IN_PROGRESS","COMPLETED","ENDED"})
+    void sessionEndpointCanReadEveryOwnedSessionLifecycleState(String sessionStatus) throws Exception {
+        long s=session(USER,null,"CURRICULUM");
+        jdbc.update("UPDATE session SET status=? WHERE id=?",sessionStatus,s);
+        sessionReport(s).andExpect(status().isOk()).andExpect(jsonPath("$.sessionId").value(s));
+    }
+    @Test void sessionEndpointRequiresAuthenticationAndHidesMissingOrForeignSessions() throws Exception {
+        long owned=session(USER,null,"CURRICULUM"),foreign=session(OTHER,null,"CURRICULUM");
+        mvc.perform(get("/api/sessions/{id}/report",owned)).andExpect(status().isUnauthorized());
+        for(long s:List.of(foreign,999999L,0L,-1L)) {
+            sessionReport(s).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        }
+        mvc.perform(get("/api/sessions/{id}/report",owned)
+                .with(jwt().jwt(j->j.subject(UUID.randomUUID().toString()))))
+                .andExpect(status().isNotFound());
+    }
     @Test void trendExcludesFourIncludesFiveAndSixAndAverageUsesAllAnswers() throws Exception {
         repeat(question,4,4,"2026-11-06T00:00:00Z");
         repeat(question,5,1,"2026-11-07T00:00:00Z");
@@ -157,6 +242,7 @@ class ReportApiTest {
         var before=new HashMap<String,List<Map<String,Object>>>();
         for(String table:List.of("app_user","subject","category","material","question","session","session_question","attempt")) before.put(table,jdbc.queryForList("SELECT * FROM "+table));
         report(subject,"scope=all").andExpect(status().isOk()); report(subject,"scope=session&sessionId="+s).andExpect(status().isOk());
+        sessionReport(s).andExpect(status().isOk());
         mvc.perform(get("/api/subjects/{id}/report?scope=all",subject).with(jwt().jwt(j->j.subject(UUID.randomUUID().toString())))).andExpect(status().isNotFound());
         before.forEach((table,rows)->assertThat(jdbc.queryForList("SELECT * FROM "+table)).isEqualTo(rows));
         verifyNoInteractions(ai);
@@ -169,6 +255,34 @@ class ReportApiTest {
                 .andExpect(jsonPath("$.paths['/api/subjects/{id}/report'].get.responses['400']").exists())
                 .andExpect(jsonPath("$.paths['/api/subjects/{id}/report'].get.responses['401']").exists())
                 .andExpect(jsonPath("$.paths['/api/subjects/{id}/report'].get.responses['404']").exists());
+    }
+    @Test void swaggerDocumentsSessionReportExampleStatusAndSecurity() throws Exception {
+        String json=mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/sessions/{id}/report'].get.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/sessions/{id}/report'].get.responses['200'].content['application/json'].examples.session").exists())
+                .andExpect(jsonPath("$.paths['/api/sessions/{id}/report'].get.responses['401']").exists())
+                .andExpect(jsonPath("$.paths['/api/sessions/{id}/report'].get.responses['404']").exists())
+                .andReturn().getResponse().getContentAsString();
+        Map<String,Object> document=new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,Map.class);
+        Map<String,Object> responseSchema=com.jayway.jsonpath.JsonPath.read(json,
+                "$.paths['/api/sessions/{id}/report'].get.responses['200'].content['application/json'].schema");
+        Map<String,Object> properties=castMap(resolveSchema(document,responseSchema).get("properties"));
+        Map<String,Object> feedbackStatus=resolveSchema(document,castMap(properties.get("feedbackStatus")));
+        assertThat((List<String>)feedbackStatus.get("enum")).containsExactlyInAnyOrder("PENDING","READY","SKIPPED","FAILED");
+    }
+    @SuppressWarnings("unchecked")
+    private static Map<String,Object> castMap(Object value) { return (Map<String,Object>)value; }
+    private static Map<String,Object> resolveSchema(Map<String,Object> document,Map<String,Object> schema) {
+        while(schema.containsKey("$ref")) {
+            String ref=(String)schema.get("$ref");
+            assertThat(ref).startsWith("#/components/schemas/");
+            schema=castMap(castMap(castMap(document.get("components")).get("schemas"))
+                    .get(ref.substring("#/components/schemas/".length())));
+        }
+        return schema;
+    }
+    ResultActions sessionReport(long id) throws Exception {
+        return mvc.perform(get("/api/sessions/{id}/report",id).with(jwt().jwt(j->j.subject(USER.toString()))));
     }
     ResultActions report(long id,String query) throws Exception {
         return mvc.perform(get("/api/subjects/"+id+"/report?"+query).with(jwt().jwt(j->j.subject(USER.toString()))));

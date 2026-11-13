@@ -5,6 +5,7 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import com.likelion.commute_study_api.common.exception.ApiException;
 import com.likelion.commute_study_api.common.exception.CommonErrorCode;
@@ -40,6 +41,29 @@ public class SubjectRepository {
                 WHERE user_id = ? ORDER BY id ASC
                 """, (rs, row) -> new Subject(rs.getLong("id"), rs.getString("name"),
                 rs.getObject("exam_date", LocalDate.class)), userId);
+    }
+
+    /** Locks the owned row so concurrent partial updates do not overwrite one another. */
+    public Optional<Subject> findOwnedForUpdate(long subjectId, UUID userId) {
+        return jdbc.query("""
+                SELECT id, name, exam_date FROM public.subject
+                WHERE id = ? AND user_id = ? FOR UPDATE
+                """, (rs, row) -> new Subject(rs.getLong("id"), rs.getString("name"),
+                rs.getObject("exam_date", LocalDate.class)), subjectId, userId).stream().findFirst();
+    }
+
+    public void updateOwned(long subjectId, UUID userId, String name, LocalDate examDate) {
+        jdbc.update(connection -> {
+            var statement = connection.prepareStatement("""
+                    UPDATE public.subject SET name = ?, exam_date = ? WHERE id = ? AND user_id = ?
+                    """);
+            statement.setString(1, name);
+            if (examDate == null) statement.setNull(2, Types.DATE);
+            else statement.setDate(2, Date.valueOf(examDate));
+            statement.setLong(3, subjectId);
+            statement.setObject(4, userId);
+            return statement;
+        });
     }
 
     public boolean isOwnedBy(long subjectId, UUID userId) {

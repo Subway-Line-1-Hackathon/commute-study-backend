@@ -3,6 +3,7 @@ package com.likelion.commute_study_api.report;
 import java.time.*;
 import java.util.*;
 import com.likelion.commute_study_api.common.exception.*;
+import com.likelion.commute_study_api.feedback.FeedbackStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -34,14 +35,42 @@ public class ReportRepository {
     }
 
     public SessionStats sessionStats(long subjectId,long sessionId,UUID user) {
-        return jdbc.queryForObject("WITH answers AS ("+ATTEMPTS+"""
-                ) SELECT COUNT(*) AS solved,COUNT(correct) AS graded,
+        return jdbc.queryForObject("WITH answers AS ("+ATTEMPTS+") "+SESSION_TOTALS+" WHERE session_id=?",
+                SESSION_STATS,subjectId,user,user,sessionId);
+    }
+
+    /** Ownership belongs to the session itself, including sessions with no questions or answers. */
+    public SessionResultInfo ownedSession(long sessionId,UUID user) {
+        return jdbc.query("""
+                SELECT started_at,feedback,feedback_status FROM public.session
+                WHERE id=? AND user_id=?
+                """,(rs,n)->new SessionResultInfo(rs.getObject("started_at",OffsetDateTime.class),
+                rs.getString("feedback"),FeedbackStatus.valueOf(rs.getString("feedback_status"))),sessionId,user)
+                .stream().findFirst().orElseThrow(()->new ApiException(CommonErrorCode.NOT_FOUND));
+    }
+
+    /** No subject filter: every linked answer in the owned session contributes exactly once. */
+    public SessionStats sessionStats(long sessionId,UUID user) {
+        return jdbc.queryForObject("""
+                WITH answers AS (
+                    SELECT a.correct,a.answered_at
+                    FROM public.attempt a JOIN public.session s ON s.id=a.session_id
+                    WHERE s.id=? AND s.user_id=? AND a.user_id=?
+                      AND EXISTS (SELECT 1 FROM public.session_question sq
+                                  WHERE sq.session_id=a.session_id AND sq.question_id=a.question_id)
+                )
+                """+SESSION_TOTALS,SESSION_STATS,sessionId,user,user);
+    }
+
+    private static final String SESSION_TOTALS="""
+                SELECT COUNT(*) AS solved,COUNT(correct) AS graded,
                     COALESCE(SUM(CASE WHEN correct=true THEN 1 ELSE 0 END),0) AS correct_count,
                     COALESCE(SUM(CASE WHEN correct=false THEN 1 ELSE 0 END),0) AS wrong,
-                    MAX(answered_at) AS last_answer FROM answers WHERE session_id=?
-                """,(rs,n)->new SessionStats(rs.getLong("solved"),rs.getLong("graded"),rs.getLong("correct_count"),
-                rs.getLong("wrong"),rs.getObject("last_answer",OffsetDateTime.class)),subjectId,user,user,sessionId);
-    }
+                    MAX(answered_at) AS last_answer FROM answers
+                """;
+    private static final org.springframework.jdbc.core.RowMapper<SessionStats> SESSION_STATS=(rs,n)->
+            new SessionStats(rs.getLong("solved"),rs.getLong("graded"),rs.getLong("correct_count"),
+                    rs.getLong("wrong"),rs.getObject("last_answer",OffsetDateTime.class));
 
     public List<DayStats> trend(long subjectId,UUID user,int minimum) {
         return jdbc.query("WITH answers AS ("+ATTEMPTS+"""
@@ -71,6 +100,7 @@ public class ReportRepository {
                 subjectId,user,user,subjectId);
     }
     public record SessionInfo(OffsetDateTime startedAt,String feedback) {}
+    public record SessionResultInfo(OffsetDateTime startedAt,String feedback,FeedbackStatus feedbackStatus) {}
     public record SessionStats(long solved,long graded,long correct,long wrong,OffsetDateTime lastAnswer) {}
     public record DayStats(LocalDate date,long answers,long graded,long correct) {}
     public record CategoryStats(long id,long graded,long correct) {}

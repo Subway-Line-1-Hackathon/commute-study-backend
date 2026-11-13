@@ -95,7 +95,8 @@ public class QuestionPregenService {
 		// 동기 예외도 전부 이 future의 실패로 모으기 위해서다.
 		return CompletableFuture
 				.supplyAsync(() -> repository.findPages(category.materialId(), category.pageStart(), category.pageEnd()), aiExecutor)
-				.thenCompose(pages -> runRound(category, pages, 0))
+				// 이미 끝난 future의 continuation도 AFTER_COMMIT의 DB 연결을 재사용하지 않게 한다.
+				.thenComposeAsync(pages -> runRound(category, pages, 0), aiExecutor)
 				.handle((ignored, ex) -> {
 					inFlight.remove(category.id());
 					long elapsedMs = System.currentTimeMillis() - start;
