@@ -1,9 +1,8 @@
 package com.likelion.commute_study_api.feedback;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -19,8 +18,6 @@ import com.likelion.commute_study_api.ai.support.MockErrorContext;
 @EnableAsync
 public class FeedbackAsyncConfig {
 
-	private static final Logger log = LoggerFactory.getLogger(FeedbackAsyncConfig.class);
-
 	public static final String FEEDBACK_EXECUTOR = "feedbackExecutor";
 
 	@Bean(FEEDBACK_EXECUTOR)
@@ -32,8 +29,8 @@ public class FeedbackAsyncConfig {
 		executor.setThreadNamePrefix("feedback-");
 		// 개발용 X-Mock-Error를 세션 종료 요청 → 피드백 작업으로 넘긴다(설정이 꺼져 있으면 AI 서버로는 안 보냄)
 		executor.setTaskDecorator(MockErrorContext.taskDecorator());
-		// 대기열이 차면 버린다(피드백 없이 숫자 요약만). 예외를 던지면 커밋 후 콜백을 부른 종료 요청까지 실패로 보일 수 있다.
-		executor.setRejectedExecutionHandler((task, pool) -> log.warn("[AI-06] 피드백 대기열이 가득 차 건너뜀"));
+		// 제출 실패는 리스너가 잡아 FAILED로 기록한다. 조용히 버리면 PENDING이 영구히 남는다.
+		executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
 		// 배포로 종료될 때 진행 중인 호출(최대 15초)은 마치고 내려간다
 		executor.setWaitForTasksToCompleteOnShutdown(true);
 		executor.setAwaitTerminationSeconds(20);

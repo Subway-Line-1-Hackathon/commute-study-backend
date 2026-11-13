@@ -48,8 +48,10 @@ public class MaterialProcessor {
                 if (!event.retry() && !transactions.claimUpload(id, event.token())) return null;
                 var material = repository.get(id);
                 return "PROCESSING".equals(material.status()) && event.token().equals(repository.processingToken(id)) ? material : null;
-            }, executor).thenCompose(material -> material == null || stopped.get()
-                    ? CompletableFuture.<MaterialProcessResponse>completedFuture(null) : call(material, 0, stopped))
+            }, executor)
+                    // A completed claim must not run this continuation with AFTER_COMMIT's bound connection.
+                    .thenComposeAsync(material -> material == null || stopped.get()
+                    ? CompletableFuture.<MaterialProcessResponse>completedFuture(null) : call(material, 0, stopped), executor)
                     .orTimeout(properties.getProcessingTimeoutMinutes(), TimeUnit.MINUTES)
                     .whenComplete((response, failure) -> {
                         stopped.set(true);
