@@ -5,6 +5,7 @@ import com.likelion.commute_study_api.common.exception.ApiException;
 import com.likelion.commute_study_api.common.exception.CommonErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @Service
 public class MaterialDeletionTransactions {
@@ -25,5 +26,11 @@ public class MaterialDeletionTransactions {
         var refs = materials.deletionReferences(material);
         deletion.markDeleted(id);
         deletion.enqueue(id, refs);
+    }
+
+    /** Zero denotes an upload rejected before a material row existed; Storage references are unique. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void enqueueUnattached(String reference) {
+        deletion.enqueue(0, java.util.List.of(reference));
     }
 }

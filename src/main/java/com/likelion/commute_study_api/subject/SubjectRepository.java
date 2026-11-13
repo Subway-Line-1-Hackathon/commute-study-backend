@@ -38,7 +38,7 @@ public class SubjectRepository {
     public List<Subject> findAllByUserId(UUID userId) {
         return jdbc.query("""
                 SELECT id, name, exam_date FROM public.subject
-                WHERE user_id = ? ORDER BY id ASC
+                WHERE user_id = ? AND deleted_at IS NULL ORDER BY id ASC
                 """, (rs, row) -> new Subject(rs.getLong("id"), rs.getString("name"),
                 rs.getObject("exam_date", LocalDate.class)), userId);
     }
@@ -47,7 +47,7 @@ public class SubjectRepository {
     public Optional<Subject> findOwnedForUpdate(long subjectId, UUID userId) {
         return jdbc.query("""
                 SELECT id, name, exam_date FROM public.subject
-                WHERE id = ? AND user_id = ? FOR UPDATE
+                WHERE id = ? AND user_id = ? AND deleted_at IS NULL FOR UPDATE
                 """, (rs, row) -> new Subject(rs.getLong("id"), rs.getString("name"),
                 rs.getObject("exam_date", LocalDate.class)), subjectId, userId).stream().findFirst();
     }
@@ -55,7 +55,7 @@ public class SubjectRepository {
     public void updateOwned(long subjectId, UUID userId, String name, LocalDate examDate) {
         jdbc.update(connection -> {
             var statement = connection.prepareStatement("""
-                    UPDATE public.subject SET name = ?, exam_date = ? WHERE id = ? AND user_id = ?
+                    UPDATE public.subject SET name = ?, exam_date = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL
                     """);
             statement.setString(1, name);
             if (examDate == null) statement.setNull(2, Types.DATE);
@@ -70,6 +70,18 @@ public class SubjectRepository {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM public.subject WHERE id = ? AND user_id = ?)
                 """, Boolean.class, subjectId, userId));
+    }
+
+    /** Called before locking material rows, including workers which insert category FKs. */
+    public boolean lockActive(long subjectId) {
+        return !jdbc.queryForList("SELECT id FROM public.subject WHERE id=? AND deleted_at IS NULL FOR UPDATE",
+                Long.class, subjectId).isEmpty();
+    }
+
+    public void requireActiveOwned(long subjectId, UUID userId) {
+        if (!Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM public.subject WHERE id=? AND user_id=? AND deleted_at IS NULL)
+                """, Boolean.class, subjectId, userId))) throw new ApiException(CommonErrorCode.NOT_FOUND);
     }
 
     /** Missing and foreign subjects deliberately have the same error contract. */
