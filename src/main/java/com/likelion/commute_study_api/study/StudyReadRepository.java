@@ -18,7 +18,8 @@ public class StudyReadRepository {
         return jdbc.query("""
                 WITH owned_categories AS (
                     SELECT c.* FROM public.category c JOIN public.subject s ON s.id=c.subject_id
-                    WHERE s.id=? AND s.user_id=?
+                    JOIN public.material m ON m.id=c.material_id
+                    WHERE s.id=? AND s.user_id=? AND m.deleted_at IS NULL
                 ), question_counts AS (
                     SELECT q.category_id, COUNT(*) AS total
                     FROM public.question q JOIN owned_categories c ON c.id=q.category_id

@@ -9,7 +9,10 @@ CREATE TABLE material(
  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, subject_id BIGINT REFERENCES subject(id),
  file_url TEXT NOT NULL, file_name TEXT, file_type material_file_type, kind material_kind, size BIGINT,
  status material_status, page_count INT, error_message TEXT, expires_at TIMESTAMP WITH TIME ZONE,
- created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+ created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, deleted_at TIMESTAMP WITH TIME ZONE);
+CREATE TABLE material_delete_object (
+ id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, material_id BIGINT NOT NULL,
+ object_ref TEXT NOT NULL, retry_order_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(material_id,object_ref));
 CREATE TABLE material_page(material_id BIGINT REFERENCES material(id), page INT, text TEXT, PRIMARY KEY(material_id,page));
 CREATE TABLE category(
  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, subject_id BIGINT REFERENCES subject(id),

@@ -205,6 +205,19 @@ class QuestionPregenServiceTest {
 	}
 
 	@Test
+	void 생성_중_자료가_삭제되면_늦게_온_결과를_저장하거나_재요청하지_않는다() {
+		CompletableFuture<QuestionGenerateResponse> pending = new CompletableFuture<>();
+		aiClient.behavior = request -> pending;
+		var result = service.pregenerate(category);
+		assertEquals(1, aiClient.requests.size());
+		repository.categories.remove(category.id()); // deleted material is no longer returned
+		pending.complete(fulfill(aiClient.requests.getFirst()));
+		assertTrue(result.join());
+		assertTrue(repository.questions.isEmpty());
+		assertEquals(1, aiClient.requests.size());
+	}
+
+	@Test
 	void 요청에_기존_지문을_excludeStems로_보낸다() {
 		repository.seedQuestions(1L, "OX", 2, 3);
 

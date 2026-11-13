@@ -79,7 +79,7 @@ public class SessionRepository {
 				from public.category c
 				join public.subject s on s.id = c.subject_id
 				join public.material m on m.id = c.material_id
-				where s.user_id = ? and c.id in (%s)
+				where s.user_id = ? and m.deleted_at is null and c.id in (%s)
 				order by c.material_id, c."order", c.id
 				""".formatted(placeholders(categoryIds.size())),
 				(rs, rowNum) -> new SessionCategory(
@@ -130,8 +130,10 @@ public class SessionRepository {
 				from public.question q
 				join public.category c on c.id = q.category_id
 				join public.subject s on s.id = c.subject_id
+				join public.material m on m.id = c.material_id
 				left join open_notes o on o.question_id = q.id
 				where s.user_id = ?
+				  and m.deleted_at is null
 				  and q.type::text in (%s)
 				  and q.difficulty = ?
 				  %s
@@ -154,6 +156,39 @@ public class SessionRepository {
 							lastWrongAt == null ? null : lastWrongAt.toInstant());
 				},
 				args.toArray());
+	}
+
+	/** Serialize selection with deletion and recheck both selected questions and requested categories. */
+	public boolean lockActiveMaterialsForSelection(UUID userId, List<Long> questionIds, List<Long> categoryIds) {
+		if (questionIds.isEmpty()) return false;
+		String questionMarks = placeholders(questionIds.size());
+		String categoryUnion = categoryIds.isEmpty() ? "" :
+				" union select c.id from public.category c where c.id in (" + placeholders(categoryIds.size()) + ")";
+		List<Object> lockArgs = new ArrayList<>(questionIds);
+		lockArgs.addAll(categoryIds);
+		jdbcTemplate.queryForList("""
+				select m.id from public.material m where m.id in (
+				  select c.material_id from public.category c where c.id in (
+				    select q.category_id from public.question q where q.id in (%s) %s))
+				order by m.id for update
+				""".formatted(questionMarks, categoryUnion), Long.class, lockArgs.toArray());
+		List<Object> args = new ArrayList<>(questionIds);
+		args.add(userId);
+		Integer count = jdbcTemplate.queryForObject("""
+				select count(*) from public.question q join public.category c on c.id=q.category_id
+				join public.material m on m.id=c.material_id join public.subject s on s.id=c.subject_id
+				where q.id in (%s) and m.deleted_at is null and s.user_id=?
+				""".formatted(questionMarks), Integer.class, args.toArray());
+		if (count == null || count != questionIds.size()) return false;
+		if (categoryIds.isEmpty()) return true;
+		args = new ArrayList<>(categoryIds);
+		args.add(userId);
+		Integer activeCategories = jdbcTemplate.queryForObject("""
+				select count(*) from public.category c join public.material m on m.id=c.material_id
+				join public.subject s on s.id=c.subject_id
+				where c.id in (%s) and m.deleted_at is null and s.user_id=?
+				""".formatted(placeholders(categoryIds.size())), Integer.class, args.toArray());
+		return activeCategories != null && activeCategories == categoryIds.size();
 	}
 
 	/**

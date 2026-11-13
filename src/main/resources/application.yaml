@@ -90,6 +90,9 @@ upload:
   allowed-types: PDF,PPTX,PNG,JPG
 
 material:
+  # Local runs must not clean shared Storage unless explicitly enabled.
+  deletion-cleanup-enabled: ${MATERIAL_DELETION_CLEANUP_ENABLED:false}
+  deletion-cleanup-interval: 1m
   # One gate covers scheduled and post-commit cleanup; never enable on shared-DB local development.
   cleanup-enabled: ${MATERIAL_CLEANUP_ENABLED:false}
   cleanup-cron: "0 0 3 * * *"

@@ -160,6 +160,7 @@ public class QuestionGenerationService {
 		if (index == plan.batches().size()) {
 			return CompletableFuture.completedFuture(savedSoFar);
 		}
+		if (repository.findCategory(plan.category().id()).isEmpty()) return CompletableFuture.completedFuture(savedSoFar);
 		CategoryTarget category = plan.category();
 		QuestionGenerateRequest request = new QuestionGenerateRequest(
 				new QuestionGenerateRequest.Category(category.id(), category.name(), plan.pages()),

@@ -5,6 +5,8 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import com.likelion.commute_study_api.ai.question.QuestionGenerateResponse;
 import com.likelion.commute_study_api.ai.question.QuestionGenerateResponse.GeneratedQuestion;
@@ -24,7 +26,9 @@ public class GeneratedQuestionWriter {
 	}
 
 	/** 실제로 저장한 개수를 돌려준다. */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public int save(CategoryTarget category, QuestionGenerateResponse response, String origin) {
+		if (!repository.lockActiveMaterialForCategory(category.id())) return 0;
 		List<GeneratedQuestion> generated = response.questions() == null ? List.of() : response.questions();
 		List<GeneratedQuestion> valid = generated.stream()
 				.filter(q -> category.isPageInRange(q.sourcePage()))

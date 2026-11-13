@@ -65,7 +65,7 @@ public class QuestionGenerationRepository {
 				select %s
 				from public.category c
 				join public.material m on m.id = c.material_id
-				where c.id = ?
+				where c.id = ? and m.deleted_at is null
 				""".formatted(CATEGORY_COLUMNS), CATEGORY_MAPPER, categoryId);
 		return rows.stream().findFirst();
 	}
@@ -75,7 +75,7 @@ public class QuestionGenerationRepository {
 				select %s
 				from public.category c
 				join public.material m on m.id = c.material_id
-				where c.material_id = ? and c.question_status = 'PREPARING'
+				where c.material_id = ? and c.question_status = 'PREPARING' and m.deleted_at is null
 				order by c."order"
 				""".formatted(CATEGORY_COLUMNS), CATEGORY_MAPPER, materialId);
 	}
@@ -86,7 +86,7 @@ public class QuestionGenerationRepository {
 				select %s
 				from public.category c
 				join public.material m on m.id = c.material_id
-				where c.question_status = 'PREPARING' and m.status = 'READY'
+				where c.question_status = 'PREPARING' and m.status = 'READY' and m.deleted_at is null
 				order by c.id
 				""".formatted(CATEGORY_COLUMNS), CATEGORY_MAPPER);
 	}
@@ -99,6 +99,15 @@ public class QuestionGenerationRepository {
 				order by page
 				""", (rs, rowNum) -> new AiPage(rs.getInt("page"), rs.getString("text")),
 				materialId, pageStart, pageEnd);
+	}
+
+	/** Called inside the writer transaction to serialize result insertion with material deletion. */
+	public boolean lockActiveMaterialForCategory(long categoryId) {
+		return !jdbcTemplate.queryForList("""
+				select m.id from public.material m
+				where m.id=(select c.material_id from public.category c where c.id=?)
+				  and m.deleted_at is null for update
+				""", Long.class, categoryId).isEmpty();
 	}
 
 	/** AI-02 excludeStems용. AI 서버는 최근 60개만 보므로 그만큼만 읽는다. */
@@ -150,6 +159,7 @@ public class QuestionGenerationRepository {
 				update public.category
 				set question_status = 'AVAILABLE'
 				where id = ? and question_status = 'PREPARING'
+				  and exists (select 1 from public.material m where m.id=category.material_id and m.deleted_at is null)
 				""", categoryId);
 	}
 
