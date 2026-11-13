@@ -5,10 +5,13 @@ import java.util.Optional;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.likelion.commute_study_api.feedback.FeedbackStatus;
 
 /**
  * 통학 후 피드백(슬라이스 15, AI-06) 입력 조회와 결과 저장.
@@ -42,7 +45,7 @@ public class SessionFeedbackRepository {
 	 * @param correctConcepts 맞힌 문제들의 개념 태그(문제 순서대로, 중복 포함 — 상위 개념 집계는 AI 서버가 한다)
 	 * @param wrongItems      틀린 문제(문제 순서대로 최대 20개)
 	 */
-	public record FeedbackSource(long sessionId, String mode, String status, String feedback, int total,
+	public record FeedbackSource(long sessionId, String mode, String status, String feedback, FeedbackStatus feedbackStatus, int total,
 			int answered, int correct, List<String> correctConcepts, List<WrongQuestion> wrongItems) {
 	}
 
@@ -51,10 +54,10 @@ public class SessionFeedbackRepository {
 
 	/** 세션이 없으면 빈 값. */
 	public Optional<FeedbackSource> findSource(long sessionId) {
-		record Summary(String mode, String status, String feedback, int total, int answered, int correct) {
+		record Summary(String mode, String status, String feedback, FeedbackStatus feedbackStatus, int total, int answered, int correct) {
 		}
 		Optional<Summary> summary = jdbcTemplate.query("""
-				select s.mode::text as mode, s.status::text as status, s.feedback,
+				select s.mode::text as mode, s.status::text as status, s.feedback, s.feedback_status,
 				       (select count(*) from public.session_question sq where sq.session_id = s.id) as total,
 				       (select count(*) from public.attempt a
 				        where a.session_id = s.id and a.correct is not null) as answered,
@@ -66,6 +69,7 @@ public class SessionFeedbackRepository {
 				rs.getString("mode"),
 				rs.getString("status"),
 				rs.getString("feedback"),
+				FeedbackStatus.valueOf(rs.getString("feedback_status")),
 				rs.getInt("total"),
 				rs.getInt("answered"),
 				rs.getInt("correct")), sessionId).stream().findFirst();
@@ -73,7 +77,7 @@ public class SessionFeedbackRepository {
 			return Optional.empty();
 		}
 		Summary s = summary.get();
-		return Optional.of(new FeedbackSource(sessionId, s.mode(), s.status(), s.feedback(), s.total(), s.answered(),
+		return Optional.of(new FeedbackSource(sessionId, s.mode(), s.status(), s.feedback(), s.feedbackStatus(), s.total(), s.answered(),
 				s.correct(), findCorrectConcepts(sessionId), findWrongItems(sessionId)));
 	}
 
@@ -102,16 +106,60 @@ public class SessionFeedbackRepository {
 				sessionId, MAX_WRONG_ITEMS);
 	}
 
-	/**
-	 * 피드백이 아직 없을 때만 저장한다. 같은 세션이 동시에 두 번 처리돼도 먼저 온 하나만 남는다.
-	 *
-	 * @return 저장했으면 true, 이미 피드백이 있었거나 세션이 없으면 false
-	 */
+	/** BEFORE_COMMIT에서 호출: 종료 사유와 무응답 생략을 원래 종료 트랜잭션에 저장한다. */
+	public void prepare(long sessionId, String reason) {
+		boolean skipReason = "NEW_START".equals(reason) || "NEXT_DAY".equals(reason);
+		jdbcTemplate.update("""
+				update public.session set feedback_status = 'SKIPPED', feedback_status_reason = ?
+				where id = ? and status in ('COMPLETED', 'ENDED')
+				  and feedback_status = 'PENDING' and feedback is null
+				  and feedback_status_reason is null
+				  and (? or not exists (select 1 from public.attempt a
+				                        where a.session_id = public.session.id and a.correct is not null))
+				""", skipReason ? reason : "NO_GRADED_ANSWERS", sessionId, skipReason);
+	}
+
+	/** 원자적 claim: 중복 이벤트가 동일한 AI 요청을 다시 시작하지 않는다. */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public boolean claimPending(long sessionId) {
+		return jdbcTemplate.update("""
+				update public.session set feedback_status_reason = 'GENERATING'
+				where id = ? and status in ('COMPLETED', 'ENDED')
+				  and feedback_status = 'PENDING' and feedback is null and feedback_status_reason is null
+				""", sessionId) == 1;
+	}
+
+	/** 피드백과 READY를 같은 UPDATE로 저장한다. 늦게 도착한 작업은 terminal 상태를 덮지 않는다. */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public boolean saveIfAbsent(long sessionId, String feedback) {
 		return jdbcTemplate.update("""
-				update public.session set feedback = ?
-				where id = ? and feedback is null
+				update public.session set feedback = ?, feedback_status = 'READY', feedback_status_reason = null
+				where id = ? and feedback is null and feedback_status = 'PENDING'
+				  and status in ('COMPLETED', 'ENDED')
 				""", feedback, sessionId) == 1;
+	}
+
+	/** 동기 AFTER_COMMIT 콜백에서도 원래 연결을 재사용하지 않고 별도 트랜잭션으로 확정한다. */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public boolean markTerminal(long sessionId, FeedbackStatus status, String reason) {
+		if (status != FeedbackStatus.SKIPPED && status != FeedbackStatus.FAILED) {
+			throw new IllegalArgumentException("종료 상태는 SKIPPED 또는 FAILED여야 합니다.");
+		}
+		return jdbcTemplate.update("""
+				update public.session set feedback_status = ?, feedback_status_reason = ?
+				where id = ? and feedback_status = 'PENDING' and feedback is null
+				  and status in ('COMPLETED', 'ENDED')
+				""", status.name(), reason, sessionId) == 1;
+	}
+
+	/** 중복 제출 실패는 이미 실행을 시작한 작업의 상태를 바꾸지 않는다. */
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public boolean failDispatch(long sessionId) {
+		return jdbcTemplate.update("""
+				update public.session set feedback_status = 'FAILED', feedback_status_reason = 'DISPATCH_REJECTED'
+				where id = ? and feedback_status = 'PENDING' and feedback is null
+				  and feedback_status_reason is null and status in ('COMPLETED', 'ENDED')
+				""", sessionId) == 1;
 	}
 
 	private List<String> fromJson(String json) {
