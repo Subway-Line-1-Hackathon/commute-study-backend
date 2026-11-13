@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
@@ -140,6 +141,119 @@ class UserApiTest {
                 .andExpect(jsonPath("$.subjects[3].dDay").doesNotExist())
                 .andExpect(jsonPath("$.subjects[4].examDate").doesNotExist())
                 .andExpect(jsonPath("$.subjects[4].dDay").doesNotExist());
+    }
+
+    @Test
+    void patchUpdatesOnlyProvidedFieldsAndDistinguishesNullExamDate() throws Exception {
+        seed(USER, null, false, false);
+        long id = subjectRepository.create(USER, "이전 과목", java.time.LocalDate.of(2026, 11, 8));
+        String bearer = token(USER, false);
+        mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", bearer).contentType("application/json")
+                        .content("{\"name\":\"  운영체제  \",\"userId\":\"" + OTHER + "\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.name").value("운영체제"))
+                .andExpect(jsonPath("$.examDate").value("2026-11-08")).andExpect(jsonPath("$.dDay").value(1));
+        mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", bearer).contentType("application/json")
+                        .content("{\"examDate\":\"2026-11-07\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("운영체제"))
+                .andExpect(jsonPath("$.examDate").value("2026-11-07")).andExpect(jsonPath("$.dDay").value(0));
+        mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", bearer).contentType("application/json")
+                        .content("{\"examDate\":null}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("운영체제"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"examDate\":null")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"dDay\":null")));
+        assertThat(jdbc.queryForObject("SELECT exam_date FROM public.subject WHERE id=?", java.time.LocalDate.class, id)).isNull();
+        mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", bearer).contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("운영체제"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"가", "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"})
+    void patchUsesSameNameCodePointBoundariesAsCreate(String name) throws Exception {
+        seed(USER, null, false, false);
+        long id = subjectRepository.create(USER, "기존", null);
+        mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", token(USER, false)).contentType("application/json")
+                        .content("{\"name\":\"" + name + "\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value(name));
+    }
+
+    @Test
+    void patchPastDateKeepsDateButHasNoDday() throws Exception {
+        seed(USER, null, false, false);
+        long id = subjectRepository.create(USER, "수학", null);
+        mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", token(USER, false)).contentType("application/json")
+                        .content("{\"name\":\"통계\",\"examDate\":\"2026-11-06\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("통계"))
+                .andExpect(jsonPath("$.examDate").value("2026-11-06"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"dDay\":null")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"name\":null}", "{\"name\":\"\"}", "{\"name\":\"   \"}",
+            "{\"name\":\"123456789012345678901\"}", "{\"name\":123}",
+            "{\"examDate\":\"2026-02-30\"}", "{\"examDate\":\"0000-01-01\"}",
+            "{\"examDate\":\"2026-2-01\"}", "{\"examDate\":20261215}", "{\"examDate\":\"\"}", "[]", "null", "{"})
+    void patchRejectsInvalidInputWithoutChanges(String body) throws Exception {
+        seed(USER, null, false, false);
+        long id = subjectRepository.create(USER, "이전", java.time.LocalDate.of(2026, 12, 15));
+        var before = jdbc.queryForMap("SELECT * FROM public.subject WHERE id=?", id);
+        mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", token(USER, false))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        assertThat(jdbc.queryForMap("SELECT * FROM public.subject WHERE id=?", id)).isEqualTo(before);
+    }
+
+    @Test
+    void patchRequiresJwtAndDoesNotExposeOrModifyOtherUsersSubject() throws Exception {
+        seed(OTHER, null, false, false);
+        long id = subjectRepository.create(OTHER, "다른 과목", null);
+        for (String bearer : new String[] {"", token(USER, true)}) {
+            mvc.perform(patch("/api/subjects/{id}", id).header("Authorization", bearer).contentType("application/json")
+                            .content("{\"name\":\"변경\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+        String bearer = token(USER, false);
+        for (long target : new long[] {id, Long.MAX_VALUE}) {
+            mvc.perform(patch("/api/subjects/{id}", target).header("Authorization", bearer).contentType("application/json")
+                            .content("{\"name\":\"변경\"}"))
+                    .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        }
+        assertThat(jdbc.queryForObject("SELECT name FROM public.subject WHERE id=?", String.class, id)).isEqualTo("다른 과목");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.app_user WHERE id=?", Integer.class, USER)).isZero();
+    }
+
+    @Test
+    void concurrentPatchesOfDifferentFieldsBothPersist() throws Exception {
+        seed(USER, null, false, false);
+        long id = subjectRepository.create(USER, "이전", java.time.LocalDate.of(2026, 11, 8));
+        String bearer = token(USER, false);
+        var start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var name = pool.submit(() -> { start.await(); return mvc.perform(patch("/api/subjects/{id}", id)
+                    .header("Authorization", bearer).contentType("application/json").content("{\"name\":\"변경\"}"))
+                    .andReturn().getResponse().getStatus(); });
+            var date = pool.submit(() -> { start.await(); return mvc.perform(patch("/api/subjects/{id}", id)
+                    .header("Authorization", bearer).contentType("application/json").content("{\"examDate\":null}"))
+                    .andReturn().getResponse().getStatus(); });
+            start.countDown();
+            assertThat(name.get(20, TimeUnit.SECONDS)).isEqualTo(200);
+            assertThat(date.get(20, TimeUnit.SECONDS)).isEqualTo(200);
+        }
+        assertThat(jdbc.queryForObject("SELECT name FROM public.subject WHERE id=?", String.class, id)).isEqualTo("변경");
+        assertThat(jdbc.queryForObject("SELECT exam_date FROM public.subject WHERE id=?", java.time.LocalDate.class, id)).isNull();
+    }
+
+    @Test
+    void swaggerDocumentsSubjectPatch() throws Exception {
+        mvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/subjects/{id}'].patch").exists())
+                .andExpect(jsonPath("$.paths['/api/subjects/{id}'].patch.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.components.schemas.SubjectPatchRequest.properties.name").exists())
+                .andExpect(jsonPath("$.components.schemas.SubjectPatchRequest.properties.examDate").exists())
+                .andExpect(jsonPath("$.components.schemas.SubjectPatchRequest.properties.nameProvided").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.SubjectPatchRequest.properties.examDateProvided").doesNotExist());
     }
 
     @Test
