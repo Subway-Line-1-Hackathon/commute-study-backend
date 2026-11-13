@@ -57,7 +57,7 @@ public class UserRepository {
     public UserSnapshot findById(UUID userId) {
         return jdbcTemplate.queryForObject("""
                 SELECT u.id, u.nickname, c.one_way_min, c.from_station, c.to_station,
-                       EXISTS (SELECT 1 FROM public.subject s WHERE s.user_id = u.id) AS has_subject
+                       EXISTS (SELECT 1 FROM public.subject s WHERE s.user_id = u.id AND s.deleted_at IS NULL) AS has_subject
                 FROM public.app_user u
                 LEFT JOIN public.commute_profile c ON c.user_id = u.id
                 WHERE u.id = ?

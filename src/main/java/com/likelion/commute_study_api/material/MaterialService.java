@@ -20,17 +20,20 @@ public class MaterialService {
     private final MaterialStorage storage;
     private final MaterialTransactions transactions;
     private final MaterialRepository repository;
+    private final MaterialDeletionTransactions deletion;
     public MaterialService(CurrentUser currentUser, SubjectRepository subjects, MaterialUploadValidator validator,
-                           MaterialStorage storage, MaterialTransactions transactions, MaterialRepository repository) {
+                           MaterialStorage storage, MaterialTransactions transactions, MaterialRepository repository,
+                           MaterialDeletionTransactions deletion) {
         this.currentUser = currentUser; this.subjects = subjects; this.validator = validator;
         this.storage = storage; this.transactions = transactions; this.repository = repository;
+        this.deletion = deletion;
     }
 
     // Storage and AI calls must not run in a DB transaction.
     public Uploaded upload(Jwt jwt, long subjectId, List<MultipartFile> files, String kind) {
         var validated = validator.validateBatch(files, kind);
         var userId = currentUser.ensureUser(jwt);
-        subjects.requireOwned(subjectId, userId);
+        subjects.requireActiveOwned(subjectId, userId);
         var references = new java.util.ArrayList<String>();
         try {
             for (var file : validated) {
@@ -43,7 +46,13 @@ public class MaterialService {
         } catch (Exception e) {
             for (String reference : references) {
                 try { storage.delete(reference); }
-                catch (Exception ignored) { log.error("Storage 보상 삭제 실패 userId={} objectRef={}", userId, reference); }
+                catch (Exception ignored) {
+                    try { deletion.enqueueUnattached(reference); }
+                    catch (Exception queueFailure) {
+                        e.addSuppressed(queueFailure);
+                        log.error("업로드 보상 삭제 예약 실패 userId={}", userId);
+                    }
+                }
             }
             throw e;
         }

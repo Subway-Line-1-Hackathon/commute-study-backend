@@ -44,4 +44,14 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	exclude '**/*PostgresTest.class'
+}
+
+// Explicit opt-in: only the disposable loopback database created by the validation script is accepted.
+tasks.register('postgresTest', Test) {
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform()
+	include '**/*PostgresTest.class'
+	outputs.upToDateWhen { false }
 }

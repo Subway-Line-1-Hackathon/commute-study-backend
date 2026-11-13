@@ -16,5 +16,6 @@ CREATE TABLE public.subject (
     user_id UUID NOT NULL REFERENCES public.app_user(id),
     name VARCHAR(100) NOT NULL,
     exam_date DATE,
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
