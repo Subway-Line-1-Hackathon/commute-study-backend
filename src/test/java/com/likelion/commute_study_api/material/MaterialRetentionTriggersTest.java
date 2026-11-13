@@ -2,11 +2,13 @@ package com.likelion.commute_study_api.material;
 
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.datasource.*;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -41,21 +43,28 @@ class MaterialRetentionTriggersTest {
     @Test void enabledHooksRunOnlyAfterCommitAndNotAfterRollback() {
         context.withPropertyValues("material.cleanup-enabled=true").run(ctx -> {
             var service=ctx.getBean(MaterialRetentionService.class);
+            var executor=ctx.getBean("materialRetentionExecutor",ThreadPoolTaskExecutor.class);
             var tx=new TransactionTemplate(ctx.getBean(PlatformTransactionManager.class));
             UUID user=UUID.randomUUID();
             tx.executeWithoutResult(status -> {
                 ctx.publishEvent(new MaterialUploadedEvent(1,user));
                 ctx.publishEvent(new MaterialSettledEvent(1));
                 verifyNoInteractions(service);
+                assertThat(executor.getThreadPoolExecutor().getTaskCount()).isZero();
             });
-            verify(service,timeout(2000)).cleanUser(user);
-            verify(service,timeout(2000)).cleanMaterialOwner(1);
+            // timeout verification holds synchronized cleanUser's monitor and can block the worker.
+            // A barrier on the real single-worker executor waits outside that monitor, within the same 2s budget.
+            executor.submit(() -> {}).get(2,TimeUnit.SECONDS);
+            verify(service).cleanUser(user);
+            verify(service).cleanMaterialOwner(1);
             tx.executeWithoutResult(status -> {
                 ctx.publishEvent(new MaterialSettledEvent(2)); status.setRollbackOnly();
             });
             ctx.publishEvent(new MaterialSettledEvent(3)); // No transaction: no cleanup.
+            executor.submit(() -> {}).get(2,TimeUnit.SECONDS);
             verify(service,never()).cleanMaterialOwner(2);
             verify(service,never()).cleanMaterialOwner(3);
+            verifyNoMoreInteractions(service);
         });
     }
 
