@@ -103,7 +103,7 @@ class QuestionPregenServiceTest {
 	}
 
 	@Test
-	void 빈_단원은_한_번의_요청으로_40문제를_만들고_AVAILABLE이_된다() {
+	void 빈_단원은_한_번의_요청으로_40문제를_난이도별로_만들고_AVAILABLE이_된다() {
 		boolean ok = service.pregenerate(category).join();
 
 		assertTrue(ok);
@@ -112,7 +112,10 @@ class QuestionPregenServiceTest {
 		assertEquals(14, countOf(aiClient.requests.get(0), "OX"));
 		assertEquals(13, countOf(aiClient.requests.get(0), "MC"));
 		assertEquals(13, countOf(aiClient.requests.get(0), "SHORT"));
-		assertTrue(aiClient.requests.get(0).requests().stream().allMatch(r -> r.difficulty() == 2));
+		// 난이도 비율 30/40/30 (쉬움12·보통16·어려움12)
+		assertEquals(12, difficultyTotal(aiClient.requests.get(0), 1));
+		assertEquals(16, difficultyTotal(aiClient.requests.get(0), 2));
+		assertEquals(12, difficultyTotal(aiClient.requests.get(0), 3));
 		assertEquals(40, repository.questions.size());
 		assertTrue(repository.questions.stream().allMatch(q -> q.origin().equals("PREGEN")));
 		assertEquals("AVAILABLE", repository.statusOf(1L));
@@ -122,9 +125,9 @@ class QuestionPregenServiceTest {
 	void shortfall이_오면_모자란_몫만_다시_요청한다() {
 		aiClient.behavior = request -> {
 			if (aiClient.requests.size() == 1) {
-				// 첫 요청: OX 14개 중 10개만 만들고 4개 부족
+				// 첫 요청: 보통 난이도 OX 6개 중 2개만 만들고 4개 부족
 				List<GeneratedQuestion> partial = new ArrayList<>(fulfill(request).questions());
-				removeN(partial, "OX", 4);
+				removeN(partial, "OX", 2, 4);
 				return CompletableFuture.completedFuture(response(partial, List.of(new Shortfall("OX", 2, 4))));
 			}
 			return CompletableFuture.completedFuture(fulfill(request));
@@ -140,27 +143,29 @@ class QuestionPregenServiceTest {
 
 	@Test
 	void 재요청을_다_써도_모자라면_있는_문제로_AVAILABLE이_된다() {
-		aiClient.behavior = request -> CompletableFuture.completedFuture(oneShortOnly(request));
+		aiClient.behavior = request -> CompletableFuture.completedFuture(oneShortOnly(request, 2));
 		service = serviceWithRefillMax(0);
 
 		assertTrue(service.pregenerate(category).join());
 
 		assertEquals(1, aiClient.requests.size()); // 재요청 0회 설정
-		assertEquals(28, repository.questions.size()); // OX 14 + MC 13 + SHORT 1
+		// OX 14 + MC 13 + SHORT(쉬움4 + 어려움4 + 보통1, 보통만 모자람)
+		assertEquals(36, repository.questions.size());
 		assertEquals("AVAILABLE", repository.statusOf(1L));
 	}
 
 	@Test
 	void 재요청은_설정한_횟수까지만_한다() {
-		aiClient.behavior = request -> CompletableFuture.completedFuture(oneShortOnly(request));
+		aiClient.behavior = request -> CompletableFuture.completedFuture(oneShortOnly(request, 2));
 
 		assertTrue(service.pregenerate(category).join());
 
-		// 최초 1회 + 재요청 2회(pregen-refill-max 기본값). 단답형이 매번 1개씩만 늘어난다.
+		// 최초 1회 + 재요청 2회(pregen-refill-max 기본값). 보통 난이도 단답형만 매번 1개씩 늘어난다.
 		assertEquals(3, aiClient.requests.size());
-		assertEquals(List.of(new TypeRequest("SHORT", 2, 12)), aiClient.requests.get(1).requests());
-		assertEquals(List.of(new TypeRequest("SHORT", 2, 11)), aiClient.requests.get(2).requests());
-		assertEquals(30, repository.questions.size());
+		assertEquals(List.of(new TypeRequest("SHORT", 2, 4)), aiClient.requests.get(1).requests());
+		assertEquals(List.of(new TypeRequest("SHORT", 2, 3)), aiClient.requests.get(2).requests());
+		// OX 14 + MC 13 + SHORT(쉬움4 + 어려움4 + 보통3)
+		assertEquals(38, repository.questions.size());
 		assertEquals("AVAILABLE", repository.statusOf(1L));
 	}
 
@@ -169,8 +174,8 @@ class QuestionPregenServiceTest {
 		aiClient.behavior = request -> {
 			List<GeneratedQuestion> generated = new ArrayList<>(fulfill(request).questions());
 			if (aiClient.requests.size() == 1) {
-				// 단원 범위는 1~3쪽. MC 2개를 9쪽 근거로 바꾼다.
-				replaceN(generated, "MC", 2, 9);
+				// 단원 범위는 1~3쪽. 보통 난이도 MC 2개를 9쪽 근거로 바꾼다.
+				replaceN(generated, "MC", 2, 2, 9);
 			}
 			return CompletableFuture.completedFuture(response(generated, List.of()));
 		};
@@ -216,9 +221,15 @@ class QuestionPregenServiceTest {
 
 	@Test
 	void 이미_문제가_다_있으면_AI를_부르지_않고_AVAILABLE만_바꾼다() {
-		repository.seedQuestions(1L, "OX", 2, 14);
-		repository.seedQuestions(1L, "MC", 2, 13);
-		repository.seedQuestions(1L, "SHORT", 2, 13);
+		repository.seedQuestions(1L, "OX", 1, 4);
+		repository.seedQuestions(1L, "MC", 1, 4);
+		repository.seedQuestions(1L, "SHORT", 1, 4);
+		repository.seedQuestions(1L, "OX", 2, 6);
+		repository.seedQuestions(1L, "MC", 2, 5);
+		repository.seedQuestions(1L, "SHORT", 2, 5);
+		repository.seedQuestions(1L, "OX", 3, 4);
+		repository.seedQuestions(1L, "MC", 3, 4);
+		repository.seedQuestions(1L, "SHORT", 3, 4);
 
 		assertTrue(service.pregenerate(category).join());
 
@@ -228,13 +239,13 @@ class QuestionPregenServiceTest {
 
 	@Test
 	void 일부가_이미_있으면_나머지만_요청한다() {
-		// 서버가 저장 도중 재시작된 경우 등
-		repository.seedQuestions(1L, "OX", 2, 14);
+		// 서버가 저장 도중 재시작된 경우 등. 보통 난이도 OX(6개)만 이미 있고 쉬움·어려움 OX는 남아있다.
+		repository.seedQuestions(1L, "OX", 2, 6);
 
 		assertTrue(service.pregenerate(category).join());
 
-		assertEquals(0, countOf(aiClient.requests.get(0), "OX"));
-		assertEquals(26, totalCount(aiClient.requests.get(0)));
+		assertEquals(8, countOf(aiClient.requests.get(0), "OX")); // 쉬움4 + 어려움4
+		assertEquals(34, totalCount(aiClient.requests.get(0)));
 		assertEquals(40, repository.questions.size());
 	}
 
@@ -284,24 +295,39 @@ class QuestionPregenServiceTest {
 				failureTracker, new GeneratedQuestionWriter(repository), Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
-	/** 단답형은 요청 개수와 상관없이 1개만 만들어지는 응답. */
-	private static QuestionGenerateResponse oneShortOnly(QuestionGenerateRequest request) {
+	/** 지정한 난이도의 단답형은 요청 개수와 상관없이 1개만 만들어지는 응답. 다른 유형·난이도는 요청한 만큼 그대로 만든다. */
+	private static QuestionGenerateResponse oneShortOnly(QuestionGenerateRequest request, int targetDifficulty) {
 		List<GeneratedQuestion> generated = new ArrayList<>(fulfill(request).questions());
-		long shortCount = generated.stream().filter(q -> q.type().equals("SHORT")).count();
-		removeN(generated, "SHORT", (int) Math.max(0, shortCount - 1));
-		return response(generated, List.of(new Shortfall("SHORT", 2, (int) Math.max(0, shortCount - 1))));
+		long shortCount = generated.stream()
+				.filter(q -> q.type().equals("SHORT") && q.difficulty() == targetDifficulty)
+				.count();
+		int shortfallCount = (int) Math.max(0, shortCount - 1);
+		removeN(generated, "SHORT", targetDifficulty, shortfallCount);
+		List<Shortfall> shortfall = shortfallCount > 0
+				? List.of(new Shortfall("SHORT", targetDifficulty, shortfallCount))
+				: List.of();
+		return response(generated, shortfall);
 	}
 
-	private static void removeN(List<GeneratedQuestion> questions, String type, int n) {
+	private static int difficultyTotal(QuestionGenerateRequest request, int difficulty) {
+		return request.requests().stream()
+				.filter(r -> r.difficulty() == difficulty)
+				.mapToInt(TypeRequest::count)
+				.sum();
+	}
+
+	private static void removeN(List<GeneratedQuestion> questions, String type, int difficulty, int n) {
 		for (int i = 0; i < n; i++) {
-			questions.remove(questions.stream().filter(q -> q.type().equals(type)).findFirst().orElseThrow());
+			questions.remove(questions.stream()
+					.filter(q -> q.type().equals(type) && q.difficulty() == difficulty)
+					.findFirst().orElseThrow());
 		}
 	}
 
-	private static void replaceN(List<GeneratedQuestion> questions, String type, int n, int sourcePage) {
+	private static void replaceN(List<GeneratedQuestion> questions, String type, int difficulty, int n, int sourcePage) {
 		for (int i = 0, replaced = 0; i < questions.size() && replaced < n; i++) {
-			if (questions.get(i).type().equals(type)) {
-				questions.set(i, question(type, 2, sourcePage));
+			if (questions.get(i).type().equals(type) && questions.get(i).difficulty() == difficulty) {
+				questions.set(i, question(type, difficulty, sourcePage));
 				replaced++;
 			}
 		}
