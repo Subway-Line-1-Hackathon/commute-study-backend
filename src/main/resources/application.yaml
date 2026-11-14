@@ -70,8 +70,7 @@ study:
 
 question:
   pregen-total: 40
-  # 사전 생성 난이도·부족분 재요청 횟수는 기획·AI 담당과 확정 전 임시값 (#24 HITL)
-  pregen-difficulty: 2
+  # 사전 생성 부족분 재요청 횟수는 기획·AI 담당과 확정 전 임시값 (#24 HITL)
   pregen-refill-max: 2
   max-per-category-difficulty: 60
   # 실패 단원 재시도 스케줄러. 팀 공용 DB라 로컬 서버가 남의 단원을 건드리지 않게 기본은 끈다.
@@ -80,10 +79,20 @@ question:
   pregen-retry-check-interval: 5m
   pregen-retry-delay: 10m
   pregen-retry-max: 1
+  # 난이도(1=쉬움, 2=보통, 3=어려움)별 유형 비율. 단원당 총 40개 유지, 난이도 비율 30/40/30 (#88)
   pregen-ratio:
-    ox: 14
-    mc: 13
-    short: 13
+    1:
+      ox: 4
+      mc: 4
+      short: 4
+    2:
+      ox: 6
+      mc: 5
+      short: 5
+    3:
+      ox: 4
+      mc: 4
+      short: 4
 
 upload:
   max-file-mb: 30

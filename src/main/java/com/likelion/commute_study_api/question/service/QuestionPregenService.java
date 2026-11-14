@@ -144,15 +144,17 @@ public class QuestionPregenService {
 		});
 	}
 
-	/** 목표 개수(유형별 비율)에서 이미 있는 개수를 뺀 만큼만 요청한다. 재시작·중복 실행에도 문제가 불어나지 않는다. */
+	/** 난이도·유형별 목표 개수에서 이미 있는 개수를 뺀 만큼만 요청한다. 재시작·중복 실행에도 문제가 불어나지 않는다. */
 	List<TypeRequest> missingRequests(long categoryId) {
-		int difficulty = questionProperties.getPregenDifficulty();
 		List<TypeRequest> missing = new ArrayList<>();
-		for (Map.Entry<String, Integer> entry : questionProperties.getPregenRatio().entrySet()) {
-			String type = entry.getKey().toUpperCase(Locale.ROOT);
-			int need = entry.getValue() - repository.countQuestions(categoryId, type, difficulty);
-			if (need > 0) {
-				missing.add(new TypeRequest(type, difficulty, need));
+		for (Map.Entry<Integer, Map<String, Integer>> byDifficulty : questionProperties.getPregenRatio().entrySet()) {
+			int difficulty = byDifficulty.getKey();
+			for (Map.Entry<String, Integer> entry : byDifficulty.getValue().entrySet()) {
+				String type = entry.getKey().toUpperCase(Locale.ROOT);
+				int need = entry.getValue() - repository.countQuestions(categoryId, type, difficulty);
+				if (need > 0) {
+					missing.add(new TypeRequest(type, difficulty, need));
+				}
 			}
 		}
 		return missing;
