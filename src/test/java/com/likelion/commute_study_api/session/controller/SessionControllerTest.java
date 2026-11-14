@@ -96,7 +96,7 @@ class SessionControllerTest {
 				.andExpect(jsonPath("$.noReviewItems").doesNotExist())
 				.andExpect(jsonPath("$.questions[0].answer").value("FIFO"))
 				.andExpect(jsonPath("$.questions[0].choices[1]").value("FIFO"))
-				.andExpect(jsonPath("$.questions[1].answer").doesNotExist())
+				.andExpect(jsonPath("$.questions[1].answer").value("push"))
 				.andExpect(jsonPath("$.questions[1].explanation").doesNotExist());
 	}
 

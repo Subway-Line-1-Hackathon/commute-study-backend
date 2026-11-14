@@ -131,11 +131,11 @@ class CreateSessionDtoTest {
 	// ---- 응답 ----
 
 	@Test
-	void 단답은_정답과_해설을_내려주지_않는다() {
+	void 단답은_정답은_내려주고_해설은_내려주지_않는다() {
 		SessionQuestion shortAnswer = SessionQuestion.of(1, "SHORT", "스택의 특징은?", List.of(), 2, "LIFO", "해설");
 		SessionQuestion mc = SessionQuestion.of(2, "MC", "큐는?", List.of("LIFO", "FIFO"), 3, "FIFO", "해설");
 
-		assertNull(shortAnswer.answer());
+		assertEquals("LIFO", shortAnswer.answer());
 		assertNull(shortAnswer.explanation());
 		assertNull(shortAnswer.choices());
 		assertEquals("FIFO", mc.answer());

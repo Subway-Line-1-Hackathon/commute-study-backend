@@ -35,7 +35,7 @@ public record CreateSessionResponse(
 
 	/**
 	 * 세션 문제. O/X·객관식은 앱에서 바로 채점하고 오프라인으로 저장해야 해서 answer·explanation을 담는다.
-	 * 단답은 AI 판정(AI-03)을 거치므로 담지 않는다(명세서 7장 임시 결정).
+	 * 단답은 TTS로 정답을 읽어줘야 해서 answer는 담지만(#90), 해설은 AI 판정(AI-03)을 거치므로 담지 않는다(명세서 7장 임시 결정).
 	 */
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public record SessionQuestion(
@@ -50,12 +50,12 @@ public record CreateSessionResponse(
 
 		public static SessionQuestion of(long id, String type, String stem, List<String> choices,
 				Integer sourcePage, String answer, String explanation) {
-			boolean includeAnswer = !"SHORT".equals(type);
+			boolean includeExplanation = !"SHORT".equals(type);
 			return new SessionQuestion(id, type, stem,
 					choices == null || choices.isEmpty() ? null : List.copyOf(choices),
 					sourcePage,
-					includeAnswer ? answer : null,
-					includeAnswer ? explanation : null);
+					answer,
+					includeExplanation ? explanation : null);
 		}
 	}
 }
