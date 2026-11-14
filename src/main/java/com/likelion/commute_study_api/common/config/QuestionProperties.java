@@ -15,7 +15,6 @@ import lombok.Setter;
 public class QuestionProperties {
 
 	private int pregenTotal = 40;
-	private int pregenDifficulty = 2;
 	private int pregenRefillMax = 2;
 	private int maxPerCategoryDifficulty = 60;
 
@@ -25,10 +24,23 @@ public class QuestionProperties {
 	private Duration pregenRetryDelay = Duration.ofMinutes(10);
 	private int pregenRetryMax = 1;
 
-	// 키: ox/mc/short
-	private Map<String, Integer> pregenRatio = new LinkedHashMap<>(Map.of(
-			"ox", 14,
-			"mc", 13,
-			"short", 13
-	));
+	// 난이도(1=쉬움, 2=보통, 3=어려움)별 유형(ox/mc/short) 비율.
+	// 단원당 총량 40개는 유지하고 난이도 비율을 30/40/30으로 나눈 값이다(#88, 추정값 — 실사용 데이터로 조정 가능).
+	private Map<Integer, Map<String, Integer>> pregenRatio = defaultPregenRatio();
+
+	private static Map<Integer, Map<String, Integer>> defaultPregenRatio() {
+		Map<Integer, Map<String, Integer>> byDifficulty = new LinkedHashMap<>();
+		byDifficulty.put(1, typeRatio(4, 4, 4));
+		byDifficulty.put(2, typeRatio(6, 5, 5));
+		byDifficulty.put(3, typeRatio(4, 4, 4));
+		return byDifficulty;
+	}
+
+	private static Map<String, Integer> typeRatio(int ox, int mc, int shortCount) {
+		Map<String, Integer> ratio = new LinkedHashMap<>();
+		ratio.put("ox", ox);
+		ratio.put("mc", mc);
+		ratio.put("short", shortCount);
+		return ratio;
+	}
 }

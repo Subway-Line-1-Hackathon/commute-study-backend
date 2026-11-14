@@ -164,4 +164,11 @@ final class QuestionTestFakes {
 	static int countOf(QuestionGenerateRequest request, String type) {
 		return request.requests().stream().filter(r -> r.type().equals(type)).mapToInt(TypeRequest::count).sum();
 	}
+
+	static int countOf(QuestionGenerateRequest request, String type, int difficulty) {
+		return request.requests().stream()
+				.filter(r -> r.type().equals(type) && r.difficulty() == difficulty)
+				.mapToInt(TypeRequest::count)
+				.sum();
+	}
 }
