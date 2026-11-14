@@ -307,12 +307,12 @@ class SessionServiceTest {
 	}
 
 	@Test
-	void 단답은_정답을_내려주지_않는다() {
+	void 단답은_정답을_내려주고_해설은_내려주지_않는다() {
 		sessions.addUnsolved(7, "SHORT", 20);
 
 		CreateSessionResponse r = service.create(JWT, categories(List.of(7L), List.of("SHORT"), null));
 
-		assertTrue(r.questions().stream().allMatch(q -> q.answer() == null && q.explanation() == null));
+		assertTrue(r.questions().stream().allMatch(q -> q.answer() != null && q.explanation() == null));
 		assertFalse(r.questions().isEmpty());
 	}
 
